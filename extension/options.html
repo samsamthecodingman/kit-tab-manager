@@ -1,0 +1,34 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Tab Bridge rules and lists</title>
+<link rel="stylesheet" href="options.css">
+</head>
+<body>
+<main>
+  <h1>Tab Bridge</h1>
+  <p class="muted">Changes save automatically. <span id="saved" role="status"></span></p>
+
+  <section>
+    <h2>Grouping rules</h2>
+    <p class="muted">"Apply my rules" puts each tab into the group of the first rule it matches. Tabs that match no rule stay where they are.</p>
+    <div id="rules"></div>
+    <div class="actions">
+      <button id="add-rule">Add rule</button>
+      <button id="suggest">Suggest rules from my current groups</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>My lists</h2>
+    <p class="muted">A list is a named set of steps that runs in order from the toolbar menu.</p>
+    <div id="lists"></div>
+    <div class="actions">
+      <button id="add-list">Add list</button>
+    </div>
+  </section>
+</main>
+<script src="options.js"></script>
+</body>
+</html>

@@ -60,7 +60,7 @@ def list_groups() -> list:
 @mcp.tool()
 def group_tabs(tab_ids: list[int], title: str | None = None, color: str | None = None, group_id: int | None = None) -> dict:
     """Put tabs into a tab group. Without group_id a new group is made; with it, the tabs join that group.
-    color is one of blue, turquoise, green, yellow, orange, red, pink, purple, grey."""
+    color is one of blue, cyan, green, yellow, orange, red, pink, purple, grey."""
     return _call("group_tabs", tab_ids=tab_ids, title=title, color=color, group_id=group_id)
 
 

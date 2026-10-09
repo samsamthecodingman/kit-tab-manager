@@ -3,7 +3,7 @@
 // Nothing here clicks, types, navigates to new addresses or submits forms.
 
 const HOST = "tab_bridge";
-const GROUP_COLORS = ["blue", "turquoise", "green", "yellow", "orange", "red", "pink", "purple", "grey"];
+const GROUP_COLORS = ["blue", "cyan", "green", "yellow", "orange", "red", "pink", "purple", "grey"];
 
 let port = null;
 
@@ -16,18 +16,26 @@ function connect() {
   port = browser.runtime.connectNative(HOST);
   setBadge(true);
   port.onMessage.addListener(async (msg) => {
+    if (msg && msg.event) return onHostEvent(msg); // e.g. "Organise with Claude" finished
     const { id, method, params } = msg || {};
     const handler = Object.prototype.hasOwnProperty.call(HANDLERS, method) ? HANDLERS[method] : null;
+    const animated = handler && ANIMATED.has(method);
+    if (animated) await Mascot.start(method, params || {});
+    let ok = false;
     try {
       if (!handler) throw new Error(`unknown method ${method}`);
       port.postMessage({ id, result: await handler(params || {}) });
+      ok = true;
     } catch (e) {
       port.postMessage({ id, error: String((e && e.message) || e) });
+    } finally {
+      if (animated) Mascot.end(ok);
     }
   });
   port.onDisconnect.addListener(() => {
     port = null;
     setBadge(false);
+    onHostEvent({ event: "disconnected" });
     setTimeout(connect, 5000);
   });
 }
