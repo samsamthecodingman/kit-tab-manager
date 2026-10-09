@@ -25,6 +25,7 @@ import re
 import shutil
 import signal
 import socket
+import stat
 import struct
 import subprocess
 import sys
@@ -57,12 +58,13 @@ Kit already shows the groups you made, so don't list every tab."""
 
 
 def socket_path() -> str:
-    base = os.environ.get("XDG_RUNTIME_DIR") or f"/tmp/tab-bridge-{os.getuid()}"
+    runtime = os.environ.get("XDG_RUNTIME_DIR")
+    base = runtime or f"/tmp/tab-bridge-{os.getuid()}"
     os.makedirs(base, mode=0o700, exist_ok=True)
     # Without XDG_RUNTIME_DIR (macOS) the folder is in shared /tmp: only use it if it's ours alone,
     # or another user could put their own socket there and see what Kit sends.
     st = os.stat(base)
-    if st.st_uid != os.getuid() or st.st_mode & 0o077:
+    if not runtime and (st.st_uid != os.getuid() or st.st_mode & 0o077):
         raise SystemExit(f"Kit won't use {base}: it belongs to someone else or others can open it.")
     return os.path.join(base, "tab-bridge.sock")
 
@@ -215,7 +217,7 @@ class Bridge:
 
     def agents(self, msg: dict) -> None:
         """Lists the assistants (and connects one first, for "connect_agent")."""
-        result, agents = None, []
+        result, agents = None, None  # None: couldn't check, so the extension keeps what it knew
         try:
             if msg.get("type") == "connect_agent":
                 agent = AGENTS_BY_ID.get(str(msg.get("id")))
@@ -441,11 +443,22 @@ def update_config(path: Path, entry: dict | None) -> str:
     backup = path.with_name(path.name + ".before-kit")
     if path.exists() and not backup.exists():
         shutil.copy2(path, backup)
-    # Write a copy and swap it in, so a crash halfway can't leave a broken settings file.
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(path.name + ".kit-tmp")
-    tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    os.replace(tmp, path)
+    # Write a copy and swap it in, so a crash halfway can't leave a broken settings file. The copy
+    # goes next to the real file (through any symlink) with the same permissions: these files can
+    # hold API keys.
+    target = path.resolve()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    tmp = target.with_name(target.name + ".kit-tmp")
+    try:
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+        if target.exists():
+            os.chmod(tmp, stat.S_IMODE(target.stat().st_mode))
+        os.replace(tmp, target)
+    except OSError:
+        tmp.unlink(missing_ok=True)
+        raise
     return "removed" if entry is None else "connected"
 
 

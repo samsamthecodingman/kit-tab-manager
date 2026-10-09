@@ -192,7 +192,7 @@ async function agentList(refresh = false) {
   if (!bridgeReady) return [];
   if (refresh || !Agents.list || Date.now() - Agents.at > 60000) {
     const msg = await askHost("agents");
-    if (msg) { Agents.list = msg.agents; Agents.at = Date.now(); }
+    if (msg && Array.isArray(msg.agents)) { Agents.list = msg.agents; Agents.at = Date.now(); }
   }
   return Agents.list || [];
 }
@@ -336,7 +336,7 @@ async function suggestRules(windowId) {
 // name: the list's name when its button was drawn, in case lists were edited since.
 async function runList(index, name) {
   const { lists } = await loadSettings();
-  const sameName = (l) => name === undefined || (l && l.name) === name;
+  const sameName = (l) => name === undefined || ((l && l.name) || "Untitled list") === name || (l && l.name) === name;
   const list = sameName(lists[index]) ? lists[index] : lists.find(sameName);
   if (!list) throw new Error("that list no longer exists");
   const windowId = await focusedWindowId();
@@ -375,10 +375,9 @@ browser.runtime.onMessage.addListener(async (msg) => {
     case "connect_agent": {
       const reply = await askHost("connect_agent", { id: msg.id });
       if (!reply) throw new Error("Kit's companion app isn't running.");
-      Agents.list = reply.agents;
-      Agents.at = Date.now();
+      if (Array.isArray(reply.agents)) { Agents.list = reply.agents; Agents.at = Date.now(); }
       if (!reply.result.ok) throw new Error(reply.result.message);
-      return { agents: reply.agents, message: reply.result.message };
+      return { agents: Agents.list || [], message: reply.result.message };
     }
     case "hi": {
       const [tab] = await browser.tabs.query({ active: true, windowId });
