@@ -22,7 +22,7 @@ Kit is a tab manager for Firefox, LibreWolf, Floorp, Waterfox and Zen. It tidies
 
 **What you get**
 
-- Tools for your AI assistant (Claude Code, Codex, Gemini CLI, Cursor and other MCP apps) to list, group, move, switch to, close and read your tabs.
+- Tools for your AI assistant (Claude Code, Codex, Gemini CLI, Hermes Agent, Cursor and other MCP apps) to list, group, move, switch to, close and read your tabs.
 - Organise with AI: one button asks Claude Code to sort your tabs into sensible groups, without opening a chat. It only gets the grouping tools, so it can't close tabs or read pages.
 - Your own rules, like "titles containing recipe go in Cooking". Apply them in one click, or have Kit suggest them from your current groups.
 - One-click tidy-ups: group loose tabs by website, sort groups, collapse everything, and close duplicate tabs after showing you which.

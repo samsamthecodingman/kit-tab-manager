@@ -6,7 +6,7 @@
 
 **A tab manager for Firefox, LibreWolf, Floorp, Waterfox and Zen, with an AI assistant when you want one.**
 
-Works with Claude Code, Codex, Gemini CLI, Cursor and other MCP-compatible AI assistants.
+Works with Claude Code, Codex, Gemini CLI, Hermes Agent, Cursor and other MCP-compatible AI assistants.
 
 Let your AI assistant list, group, move, switch, close and read your tabs, or tidy up in one click from the toolbar.
 
@@ -114,7 +114,7 @@ It installs Kit's companion app in your home folder (it needs `python3`, which m
 | AI assistant | Setup | Status |
 |---|---|---|
 | [Claude Code](https://claude.com/claude-code) | Connected automatically | Tested. Also powers **Organise with AI**. |
-| Codex, Gemini CLI, Cursor, Windsurf, Claude Desktop | Connected automatically if installed | Should work (they all speak MCP); not tested yet |
+| Codex, Gemini CLI, Hermes Agent, Cursor, Windsurf, Claude Desktop | Connected automatically if installed | Should work (they all speak MCP); not tested yet. In Hermes, type `/reload-mcp` or start a new session. |
 | VS Code and other MCP apps | Add by hand: run `python3 ~/.local/share/kit/kit.py mcp` (on macOS, `~/Library/Application Support/Kit/kit.py`) | Should work |
 
 The installer only edits an assistant's settings if that assistant is installed, keeps a one-time backup (`*.before-kit`) of each file it changes, and leaves alone any file it can't read safely.

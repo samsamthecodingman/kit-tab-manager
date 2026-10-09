@@ -401,17 +401,30 @@ def register_assistants(python: str, remove: bool = False) -> None:
         if marker.is_dir():
             found = True
             print(f"{name}: {update_config(config, entry)} ({config})")
-    codex = find_program("codex")
-    if codex:
+    # Assistants with their own command for this, so their config files are never edited by hand.
+    clis = [
+        ("Codex", "codex", [MCP_NAME, "--", python, str(SELF), "mcp"], ""),
+        ("Hermes Agent", "hermes", [MCP_NAME, "--command", python, "--args", str(SELF), "mcp"],
+         " (type /reload-mcp in an open Hermes session)"),
+    ]
+    for name, program, add_args, note in clis:
+        path = find_program(program)
+        if not path:
+            continue
         found = True
-        subprocess.run([codex, "mcp", "remove", MCP_NAME], capture_output=True)
-        if not remove:
-            done = subprocess.run([codex, "mcp", "add", MCP_NAME, "--", python, str(SELF), "mcp"], capture_output=True)
-            print("Codex: " + ("connected" if done.returncode == 0 else "couldn't connect; add Kit by hand"))
+        subprocess.run([path, "mcp", "remove", MCP_NAME], input="y\n", capture_output=True, text=True)  # Hermes confirms removals
+        if remove:
+            gone = MCP_NAME not in subprocess.run([path, "mcp", "list"], capture_output=True, text=True).stdout
+            print(f"{name}: " + ("removed" if gone else "couldn't remove; remove Kit by hand"))
         else:
-            print("Codex: removed")
+            # Hermes asks to confirm enabling the tools (and, if its test connection fails, whether to
+            # save anyway), so answer yes; then check the server really is in the assistant's list.
+            done = subprocess.run([path, "mcp", "add", *add_args], input="y\ny\n", capture_output=True, text=True)
+            listed = subprocess.run([path, "mcp", "list"], capture_output=True, text=True)
+            ok = done.returncode == 0 and MCP_NAME in listed.stdout
+            print(f"{name}: " + (f"connected{note}" if ok else "couldn't connect; add Kit by hand"))
     if not found and not remove:
-        print("No other MCP assistants found (Cursor, Gemini CLI, Codex, Windsurf, Claude Desktop).")
+        print("No other MCP assistants found (Cursor, Gemini CLI, Codex, Hermes Agent, Windsurf, Claude Desktop).")
 
 
 def main() -> None:
