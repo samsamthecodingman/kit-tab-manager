@@ -1,8 +1,8 @@
 {
   "manifest_version": 2,
-  "name": "Kit: Tab manager for Claude Code",
+  "name": "Kit: Tab Manager",
   "version": "0.7.0",
-  "description": "Lets Claude Code list, group, move, close and read your Firefox tabs through a local bridge, with one-click tidy-ups and Kit, its tab-bar mascot. It never clicks, types or submits anything.",
+  "description": "Tidy your Firefox tabs with rules, lists and one-click tidy-ups, or let your AI assistant (Claude Code today) sort them. It never clicks, types or submits anything.",
   "homepage_url": "https://github.com/samsamthecodingman/kit-tab-manager",
   "icons": {
     "48": "icons/kit-48.png",
@@ -39,7 +39,7 @@
     "persistent": true
   },
   "browser_action": {
-    "default_title": "Kit: Tab manager for Claude Code",
+    "default_title": "Kit: Tab Manager",
     "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/kit-toolbar-16.png",

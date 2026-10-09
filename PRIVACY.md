@@ -1,8 +1,8 @@
 # Privacy policy
 
-*Kit: Tab manager for Claude Code. Last updated 10 October 2026.*
+*Kit: Tab Manager. Last updated 10 October 2026.*
 
-Kit is a Firefox extension that lets [Claude Code](https://claude.com/claude-code), running on your own computer, see and organise your tabs. This page explains what Kit can see, where that information goes, and what stays on your computer.
+Kit is a Firefox extension that tidies your tabs, and can let your AI assistant ([Claude Code](https://claude.com/claude-code), running on your own computer) see and organise them. This page explains what Kit can see, where that information goes, and what stays on your computer.
 
 ## What Kit can see
 

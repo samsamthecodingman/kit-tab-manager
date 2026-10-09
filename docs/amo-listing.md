@@ -4,7 +4,7 @@ Copy these into the Developer Hub (**Edit Product Page**, and **Upload New Versi
 
 ## Name
 
-Kit: Tab manager for Claude Code
+Kit: Tab Manager
 
 ## Add-on URL
 
@@ -18,7 +18,7 @@ Tidy your Firefox tabs with one-click rules and tidy-ups, and Kit, a pixel fox w
 
 ## Description
 
-Kit connects Firefox to Claude Code, Anthropic's coding assistant, running on your own computer. Ask Claude to group your research tabs, find the tab with your notes, or summarise the page you have open, and it can.
+Kit is a tab manager for Firefox. It tidies your tabs on its own, and connects to your AI assistant when you want something smarter: Claude Code today, with more assistants to come. Ask Claude to group your research tabs, find the tab with your notes, or summarise the page you have open, and it can.
 
 **What you get**
 

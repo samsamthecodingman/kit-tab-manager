@@ -4,7 +4,9 @@
 
 # Kit
 
-**A Firefox tab manager for Claude Code.**
+**A tab manager for Firefox, with an AI assistant when you want one.**
+
+Works with Claude Code today, with more AI assistants to come.
 
 Let Claude Code list, group, move, switch, close and read your tabs, or tidy up in one click from the toolbar.
 
