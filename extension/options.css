@@ -19,6 +19,7 @@ section { background: var(--card); border: 1px solid var(--line); border-radius:
 .rule, .step { display: grid; gap: 6px; align-items: center; margin-bottom: 6px; }
 .rule { grid-template-columns: 150px 1fr auto 1fr 110px auto; }
 .step { grid-template-columns: 1fr 1fr auto; }
+.step input[hidden] { display: block !important; visibility: hidden; } /* keeps the delete button in its column */
 .arrow { color: var(--muted); }
 input, select { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; min-width: 0; width: 100%; }
 input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }

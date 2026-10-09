@@ -25,11 +25,10 @@ async function run(button, msg) {
 
 function drawPixel() {
   const ctx = $("pixel").getContext("2d");
-  const px = (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x * 2, y * 2, w * 2, h * 2); };
-  px(3, 0, 10, 2, "#378ADD"); px(4, 0, 4, 1, "#E6F1FB"); px(4, 2, 1, 1, "#993C1D"); px(11, 2, 1, 1, "#993C1D");
-  [[4, 3, 7, 1], [3, 4, 9, 1], [2, 5, 11, 6], [3, 11, 9, 2], [1, 4, 1, 3], [13, 4, 1, 3]].forEach((r) => px(...r, "#D97757"));
-  px(4, 7, 2, 2, "#2C2C2A"); px(9, 7, 2, 2, "#2C2C2A"); px(4, 7, 1, 1, "#fff"); px(9, 7, 1, 1, "#fff");
-  px(6, 10, 3, 1, "#993C1D"); px(4, 13, 2, 3, "#993C1D"); px(9, 13, 2, 3, "#993C1D");
+  const px = (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x * 2 + 3, y * 2 + 3, w * 2, h * 2); };
+  [[3, 0, 7, 1], [2, 1, 9, 1], [1, 2, 11, 6], [2, 8, 9, 2], [0, 1, 1, 3], [12, 1, 1, 3]].forEach((r) => px(...r, "#D97757"));
+  px(3, 4, 2, 2, "#2C2C2A"); px(8, 4, 2, 2, "#2C2C2A"); px(3, 4, 1, 1, "#fff"); px(8, 4, 1, 1, "#fff");
+  px(5, 7, 3, 1, "#993C1D"); px(3, 10, 2, 3, "#993C1D"); px(8, 10, 2, 3, "#993C1D");
 }
 
 const RECENT_MS = 10 * 60 * 1000;

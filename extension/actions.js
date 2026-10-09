@@ -56,8 +56,7 @@ async function groupTitles(windowId) {
 
 // Runs fn with Pixel on screen; fn returns the text Pixel says when done.
 async function withPixel(windowId, label, fn) {
-  const [active] = await browser.tabs.query({ active: true, windowId });
-  Mascot.begin(windowId, active ? active.id : null, label);
+  Mascot.begin(windowId, label);
   let ok = false, said = "Done";
   try {
     said = (await fn()) || "Done";
@@ -173,7 +172,6 @@ async function organiseWithClaude(instructions = "") {
   if (Organiser.running) return Organiser.running.promise;
   if (!port) throw new Error("The bridge isn't running, so Claude can't be started.");
   const windowId = await focusedWindowId();
-  const [active] = await browser.tabs.query({ active: true, windowId });
   const run = { run_id: Date.now() };
   run.promise = new Promise((resolve) => (run.resolve = resolve)).then((r) => {
     Organiser.running = null;
@@ -183,7 +181,7 @@ async function organiseWithClaude(instructions = "") {
     return r.summary;
   });
   Organiser.running = run;
-  Mascot.begin(windowId, active ? active.id : null, "Thinking about your tabs…");
+  Mascot.begin(windowId, "Thinking about your tabs…");
   port.postMessage({ type: "organise", run_id: run.run_id, instructions: String(instructions).slice(0, 500) });
   return run.promise;
 }
