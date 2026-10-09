@@ -3,10 +3,6 @@
 
 const $ = (id) => document.getElementById(id);
 const send = (msg) => browser.runtime.sendMessage(msg);
-const GROUP_HEX = {
-  blue: "#378ADD", cyan: "#1D9E9E", green: "#3B9B4A", yellow: "#D4A50F", orange: "#E8833A",
-  red: "#D94848", pink: "#D9579B", purple: "#8B5CD6", grey: "#8A8986",
-};
 const FIELD_LABEL = { title: "Title contains", url: "Address contains", site: "Website is" };
 let stepTypes = {};
 

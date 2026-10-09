@@ -2,9 +2,10 @@
 // it made or added to (as coloured chips), and the assistant's own words, cut to two lines with
 // "More" when longer. Used by the toolbar menu and the full page.
 
+// Firefox's tab group colours, as Kit draws them (also used by the full page).
 const GROUP_HEX = {
-  blue: "#3B82F6", cyan: "#06B6D4", green: "#22C55E", yellow: "#EAB308", orange: "#F97316",
-  red: "#EF4444", pink: "#EC4899", purple: "#A855F7", grey: "#9CA3AF",
+  blue: "#378ADD", cyan: "#1D9E9E", green: "#3B9B4A", yellow: "#D4A50F", orange: "#E8833A",
+  red: "#D94848", pink: "#D9579B", purple: "#8B5CD6", grey: "#8A8986",
 };
 
 function timeAgo(at) {
@@ -56,7 +57,7 @@ function renderResult(container, last, onDismiss) {
         chips.append(chip);
       }
       container.append(chips);
-    } else {
+    } else if (Array.isArray(last.changes)) { // older results don't record changes
       container.append(el("p", "kit-result-none", "No groups changed: your tabs were already tidy."));
     }
   }

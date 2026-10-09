@@ -117,3 +117,5 @@ $("suggest").addEventListener("click", async () => {
   lists = Array.isArray(s.lists) ? s.lists : [];
   render();
 })();
+
+$("nav-home").addEventListener("click", () => browser.tabs.create({ url: browser.runtime.getURL("home.html") }));

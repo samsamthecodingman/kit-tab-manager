@@ -1,0 +1,23 @@
+/* Kit's colours, shared by the toolbar menu, the full page and the rules & lists page. */
+:root {
+  --bg: #faf9f6; --surface: #ffffff; --surface-2: #f3f1ec; --hover: #f4f2ee;
+  --fg: #1f1e1d; --muted: #6b6a66; --line: #e6e3dc;
+  --accent: #c4673f; --accent-hover: #b45b35; --accent-fg: #ffffff; --accent-soft: #fbeee7; --accent-text: #a8532c;
+  --bad: #a32d2d; --stage: #1c1b22; --stage-2: #2b2a33;
+  --radius: 14px;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1a1917; --surface: #23221f; --surface-2: #2b2a27; --hover: #2e2d29;
+    --fg: #eeece6; --muted: #a3a19a; --line: #3a3935;
+    --accent: #d97757; --accent-hover: #e38a6c; --accent-fg: #1f1e1d; --accent-soft: #3a2820; --accent-text: #f0a07e;
+    --bad: #f09595; --stage: #141318; --stage-2: #24232b;
+  }
+}
+
+/* The full page's and rules page's top bar. */
+.topbar { display: flex; align-items: center; gap: 14px; padding: 18px 0; }
+.brand { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 18px; }
+.brand img { image-rendering: pixelated; }
+.spacer { flex: 1; }
