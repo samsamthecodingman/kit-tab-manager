@@ -9,7 +9,7 @@ let port = null;
 
 function setBadge(connected) {
   browser.browserAction.setBadgeText({ text: connected ? "" : "off" });
-  browser.browserAction.setTitle({ title: connected ? "Tab Bridge: connected" : "Tab Bridge: bridge not running" });
+  browser.browserAction.setTitle({ title: connected ? "Kit: connected to Claude Code" : "Kit: bridge not running" });
 }
 
 function connect() {

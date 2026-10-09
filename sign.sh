@@ -15,7 +15,7 @@ fi
 export WEB_EXT_API_KEY WEB_EXT_API_SECRET
 
 version=$(python3 -c 'import json; print(json.load(open("extension/manifest.json"))["version"])')
-echo "Checking and signing Tab Bridge $version (Mozilla won't sign the same version twice)…"
+echo "Checking and signing Kit $version (Mozilla won't sign the same version twice)…"
 
 npx --yes web-ext@10 lint --source-dir extension
 npx --yes web-ext@10 sign --channel=unlisted --source-dir extension --artifacts-dir web-ext-artifacts

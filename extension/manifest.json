@@ -1,8 +1,8 @@
 {
   "manifest_version": 2,
-  "name": "Tab Bridge",
-  "version": "0.5.0",
-  "description": "Lets Claude Code list, group, move, close and read your Firefox tabs through a local bridge, with one-click tidy-ups and Kit, a tab-bar mascot. It never clicks, types or submits anything.",
+  "name": "Kit: Tab manager for Claude Code",
+  "version": "0.5.1",
+  "description": "Lets Claude Code list, group, move, close and read your Firefox tabs through a local bridge, with one-click tidy-ups and Kit, its tab-bar mascot. It never clicks, types or submits anything.",
   "icons": {
     "48": "icons/kit-48.png",
     "96": "icons/kit-96.png",
@@ -38,7 +38,7 @@
     "persistent": true
   },
   "browser_action": {
-    "default_title": "Tab Bridge",
+    "default_title": "Kit: Tab manager for Claude Code",
     "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/kit-toolbar-16.png",

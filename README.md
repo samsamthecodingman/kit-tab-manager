@@ -1,12 +1,12 @@
 <div align="center">
 
-<img src="docs/kit.svg" width="119" alt="Kit, the Tab Bridge mascot: a little Claude-orange creature in a Firefox-orange fox hoodie">
+<img src="docs/kit.svg" width="119" alt="Kit: a little Claude-orange creature in a Firefox-orange fox hoodie">
 
-# Tab Bridge
+# Kit
 
-**Let Claude Code see and organise your Firefox tabs.**
+**A Firefox tab manager for Claude Code.**
 
-List, group, move, switch, close and read tabs from Claude Code, or tidy up in one click from the toolbar.
+Let Claude Code list, group, move, switch, close and read your tabs, or tidy up in one click from the toolbar.
 
 ![Firefox 142+](https://img.shields.io/badge/Firefox-142%2B-FF7139?logo=firefoxbrowser&logoColor=white)
 ![Claude Code MCP](https://img.shields.io/badge/Claude%20Code-MCP%20server-D97757)
@@ -47,7 +47,7 @@ List, group, move, switch, close and read tabs from Claude Code, or tidy up in o
 
 <table>
   <tr>
-    <td align="center" width="34%"><img src="docs/menu.png" alt="The Tab Bridge toolbar menu" width="260"><br><sub>The toolbar menu</sub></td>
+    <td align="center" width="34%"><img src="docs/menu.png" alt="The Kit toolbar menu" width="260"><br><sub>The toolbar menu</sub></td>
     <td align="center"><img src="docs/settings.png" alt="The rules and lists settings page" width="100%"><br><sub>Rules and lists</sub></td>
   </tr>
 </table>
@@ -111,7 +111,7 @@ The toolbar button shows **Connected to Claude Code** once everything is in plac
 >
 > *Close the duplicate Ed Discussion tabs.*
 
-**From Firefox**, click the Tab Bridge button:
+**From Firefox**, click the Kit button:
 
 - **Organise my tabs** asks Claude to group everything. It takes 20–60 seconds; you can close the menu while it works, and the summary is waiting when you reopen it.
 - **Tidy up** runs the one-click actions.
@@ -122,7 +122,7 @@ The toolbar button shows **Connected to Claude Code** once everything is in plac
 ## Safety and privacy
 
 - **No clicking, typing or form submission.** The extension never navigates to new addresses or submits anything.
-- **Private windows are invisible** to Tab Bridge: their tabs are never listed or read.
+- **Private windows are invisible** to Kit: their tabs are never listed or read.
 - **Page text is data, not instructions.** `read_tab` returns whatever a page says; Claude is told to treat it as untrusted.
 - **Closed tabs can be recovered.** They're logged to `~/.local/share/tab-bridge/closed.jsonl`, and Firefox's **History → Recently Closed Tabs** reopens them. Closing duplicates from the menu always shows you the list first.
 - **Organise with Claude is fenced in.** It runs `claude -p` (Sonnet) in an empty folder, with no shell, file or web tools and only the grouping tools. It cannot close or read tabs, anything else is refused automatically, and it stops after 5 minutes. Runs are logged to `~/.local/share/tab-bridge/organise.log`.
@@ -147,7 +147,7 @@ npx web-ext lint --source-dir extension # check the extension
 <details>
 <summary><b>Signing</b></summary>
 
-Firefox only installs extensions permanently once Mozilla has signed them. Tab Bridge is signed as an **unlisted** add-on: Mozilla reviews it automatically and signs it, but it never appears on addons.mozilla.org.
+Firefox only installs extensions permanently once Mozilla has signed them. Kit is signed as an **unlisted** add-on: Mozilla reviews it automatically and signs it, but it never appears on addons.mozilla.org.
 
 1. Sign in at [addons.mozilla.org](https://addons.mozilla.org/developers/) and create an API key under **Tools → Manage API Keys**.
 2. Run:
