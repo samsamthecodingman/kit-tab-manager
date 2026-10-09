@@ -21,7 +21,9 @@ from __future__ import annotations
 import itertools
 import json
 import os
+import re
 import shutil
+import signal
 import socket
 import struct
 import subprocess
@@ -57,6 +59,11 @@ Kit already shows the groups you made, so don't list every tab."""
 def socket_path() -> str:
     base = os.environ.get("XDG_RUNTIME_DIR") or f"/tmp/tab-bridge-{os.getuid()}"
     os.makedirs(base, mode=0o700, exist_ok=True)
+    # Without XDG_RUNTIME_DIR (macOS) the folder is in shared /tmp: only use it if it's ours alone,
+    # or another user could put their own socket there and see what Kit sends.
+    st = os.stat(base)
+    if st.st_uid != os.getuid() or st.st_mode & 0o077:
+        raise SystemExit(f"Kit won't use {base}: it belongs to someone else or others can open it.")
     return os.path.join(base, "tab-bridge.sock")
 
 
@@ -75,6 +82,22 @@ def organise_prompt(instructions: str) -> str:
     return ORGANISE_PROMPT.format(extra=extra)
 
 
+def run_in_own_group(cmd: list, cwd: Path, timeout: float) -> subprocess.CompletedProcess:
+    """Runs cmd in its own process group, so a timeout also stops anything it started."""
+    proc = subprocess.Popen(cmd, cwd=cwd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                            text=True, errors="replace", start_new_session=True)
+    try:
+        out, err = proc.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        proc.communicate()
+        raise
+    return subprocess.CompletedProcess(cmd, proc.returncode, out, err)
+
+
 def run_organise(agent_id: str, instructions: str, prompt: str | None = None) -> tuple[bool, str]:
     agent = AGENTS_BY_ID.get(agent_id)
     run_dir = DATA_DIR / "organise-run"  # empty working folder, so no project instructions get loaded
@@ -86,14 +109,17 @@ def run_organise(agent_id: str, instructions: str, prompt: str | None = None) ->
         if not find_program(agent["program"]):
             raise RuntimeError(f"couldn't find {name}. Is it installed?")
         cmd, read_result = agent["organise"](find_program(agent["program"]), prompt or organise_prompt(instructions), run_dir)
-        proc = subprocess.run(cmd, cwd=run_dir, capture_output=True, text=True, timeout=ORGANISE_TIMEOUT, stdin=subprocess.DEVNULL)
+        proc = run_in_own_group(cmd, run_dir, ORGANISE_TIMEOUT)
     except subprocess.TimeoutExpired:
         ok, summary = False, f"{name} took too long, so I stopped it."
     except (OSError, RuntimeError) as exc:
         ok, summary = False, f"Couldn't start {name}: {exc}"
     else:
         detail = proc.stderr[-2000:]
-        ok, summary = read_result(proc, run_dir)
+        try:
+            ok, summary = read_result(proc, run_dir)
+        except (OSError, ValueError, AttributeError, TypeError) as exc:
+            ok, summary = False, f"Couldn't read {name}'s answer: {exc}"
         if not ok:
             detail = (proc.stdout[-1000:] + "\n" + detail).strip()
         summary = summary or (f"{name} finished without a summary." if ok else f"{name} stopped with exit code {proc.returncode}.")
@@ -129,7 +155,12 @@ class Bridge:
                 if len(header) < 4:
                     return
                 (length,) = struct.unpack("<I", header)
-                msg = json.loads(self._in.read(length).decode("utf-8"))
+                try:
+                    msg = json.loads(self._in.read(length).decode("utf-8"))
+                except ValueError:
+                    continue  # one unreadable message mustn't stop the bridge
+                if not isinstance(msg, dict):
+                    continue
                 if msg.get("type") == "ping":
                     self._send_native({"event": "pong", "version": VERSION})
                     continue
@@ -175,6 +206,8 @@ class Bridge:
             return
         try:
             ok, summary = run_organise(str(msg.get("agent") or ""), str(msg.get("instructions") or "")[:500])
+        except Exception as exc:  # whatever happens, the extension hears back, or its menu waits forever
+            ok, summary = False, f"Organising failed: {exc}"
         finally:
             self._organising.release()
         if not self.closed.is_set():
@@ -182,13 +215,17 @@ class Bridge:
 
     def agents(self, msg: dict) -> None:
         """Lists the assistants (and connects one first, for "connect_agent")."""
-        result = None
-        if msg.get("type") == "connect_agent":
-            agent = AGENTS_BY_ID.get(str(msg.get("id")))
-            ok, message = connect_agent(agent, sys.executable) if agent else (False, "unknown assistant")
-            result = {"id": msg.get("id"), "ok": ok, "message": message}
+        result, agents = None, []
+        try:
+            if msg.get("type") == "connect_agent":
+                agent = AGENTS_BY_ID.get(str(msg.get("id")))
+                ok, message = connect_agent(agent, sys.executable) if agent else (False, "unknown assistant")
+                result = {"id": msg.get("id"), "ok": ok, "message": message}
+            agents = agents_status()
+        except Exception as exc:  # always answer, so the page doesn't wait for a reply that never comes
+            result = {"id": msg.get("id"), "ok": False, "message": f"Something went wrong: {exc}"}
         if not self.closed.is_set():
-            self._send_native({"event": "agents", "req": msg.get("req"), "agents": agents_status(), "result": result})
+            self._send_native({"event": "agents", "req": msg.get("req"), "agents": agents, "result": result})
 
     # The MCP server (kit.py mcp) sends one JSON request per line over the socket.
     def serve_client(self, conn: socket.socket) -> None:
@@ -215,6 +252,7 @@ def run_host() -> None:
     srv.bind(path)
     os.umask(old)
     srv.listen(8)
+    mine = os.stat(path).st_ino  # a later Kit (another browser) may take the path over
 
     def accept_forever():
         while True:
@@ -230,7 +268,8 @@ def run_host() -> None:
     finally:
         srv.close()
         try:
-            os.unlink(path)
+            if os.stat(path).st_ino == mine:  # leave a newer Kit's socket alone
+                os.unlink(path)
         except FileNotFoundError:
             pass
 
@@ -263,7 +302,7 @@ def close_tabs(args: dict):
     result = bridge_call("close_tabs", args)
     CLOSED_LOG.parent.mkdir(parents=True, exist_ok=True)
     with CLOSED_LOG.open("a") as f:
-        for t in result.get("closed", []):
+        for t in (result or {}).get("closed", []):
             f.write(json.dumps({"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), **t}) + "\n")
     return result
 
@@ -312,7 +351,9 @@ ALLOWED_TOOLS = {t["name"] for t in TOOLS}  # `kit.py mcp --organise` narrows th
 
 def mcp_handle(msg: dict) -> dict | None:
     """One JSON-RPC message in, the reply out (None for notifications)."""
-    method, rid, params = msg.get("method"), msg.get("id"), msg.get("params") or {}
+    method, rid, params = msg.get("method"), msg.get("id"), msg.get("params")
+    if not isinstance(params, dict):
+        params = {}
     if rid is None:
         return None  # notifications (e.g. notifications/initialized) need no reply
     if method == "initialize":
@@ -326,11 +367,13 @@ def mcp_handle(msg: dict) -> dict | None:
     elif method == "tools/list":
         result = {"tools": [t for t in TOOLS if t["name"] in ALLOWED_TOOLS]}
     elif method == "tools/call":
-        handler = HANDLERS.get(params.get("name")) if params.get("name") in ALLOWED_TOOLS else None
+        name = params.get("name")
+        handler = HANDLERS.get(name) if isinstance(name, str) and name in ALLOWED_TOOLS else None
         if handler is None:
             return {"jsonrpc": "2.0", "id": rid, "error": {"code": -32602, "message": f"unknown tool {params.get('name')}"}}
         try:
-            out = handler(params.get("arguments") or {})
+            args = params.get("arguments")
+            out = handler(args if isinstance(args, dict) else {})
             result = {"content": [{"type": "text", "text": json.dumps(out, indent=1)}]}
         except Exception as exc:  # tool failures go back to the model as text, not as protocol errors
             result = {"content": [{"type": "text", "text": str(exc)}], "isError": True}
@@ -349,7 +392,11 @@ def run_mcp() -> None:
         except ValueError:
             reply = {"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "parse error"}}
         else:
-            reply = mcp_handle(msg) if isinstance(msg, dict) else None
+            try:
+                reply = mcp_handle(msg) if isinstance(msg, dict) else None
+            except Exception as exc:  # one odd request mustn't end the server
+                rid = msg.get("id") if isinstance(msg, dict) else None
+                reply = {"jsonrpc": "2.0", "id": rid, "error": {"code": -32603, "message": f"internal error: {exc}"}} if rid is not None else None
         if reply is not None:
             sys.stdout.write(json.dumps(reply) + "\n")
             sys.stdout.flush()
@@ -365,7 +412,7 @@ ORGANISE_MCP_NAME = "kit-organise"  # Hermes only: a server with just the groupi
 
 def run_cli(args: list[str], answers: str = "") -> subprocess.CompletedProcess:
     # Some assistants ask to confirm (Hermes: "Enable all tools?", "Remove?"), so answers says yes.
-    return subprocess.run(args, input=answers, capture_output=True, text=True, timeout=120)
+    return subprocess.run(args, input=answers, capture_output=True, text=True, errors="replace", timeout=120)
 
 
 def mcp_entry(python: str, organise: bool = False) -> list[str]:
@@ -376,7 +423,8 @@ def update_config(path: Path, entry: dict | None) -> str:
     """Adds Kit's entry to an mcpServers config (or removes it, when entry is None) and says what happened.
     Leaves files it can't read alone, and keeps a one-time backup of the original next to it."""
     try:
-        data = json.loads(path.read_text()) if path.exists() and path.read_text().strip() else {}
+        text = path.read_text(encoding="utf-8") if path.exists() else ""
+        data = json.loads(text) if text.strip() else {}
     except (OSError, ValueError):
         return "skipped: couldn't read the file (it may contain comments); add Kit by hand"
     if not isinstance(data, dict) or not isinstance(data.get("mcpServers", {}), dict):
@@ -393,7 +441,11 @@ def update_config(path: Path, entry: dict | None) -> str:
     backup = path.with_name(path.name + ".before-kit")
     if path.exists() and not backup.exists():
         shutil.copy2(path, backup)
-    path.write_text(json.dumps(data, indent=2) + "\n")
+    # Write a copy and swap it in, so a crash halfway can't leave a broken settings file.
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".kit-tmp")
+    tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    os.replace(tmp, path)
     return "removed" if entry is None else "connected"
 
 
@@ -428,6 +480,7 @@ def claude_organise(claude: str, prompt: str, run_dir: Path):
 
 def codex_organise(codex: str, prompt: str, run_dir: Path):
     toml = json.dumps  # TOML basic strings and arrays of them read like JSON
+    (run_dir / "codex-summary.txt").unlink(missing_ok=True)  # never report an earlier run's answer
     cmd = [
         codex, "exec", "--ignore-user-config",  # only Kit's MCP server below, none of the user's
         "--sandbox", "read-only", "--disable", "shell_tool",  # no shell at all (and read-only if it had one)
@@ -441,7 +494,7 @@ def codex_organise(codex: str, prompt: str, run_dir: Path):
 
     def read(proc, run_dir):
         summary = run_dir / "codex-summary.txt"
-        text = summary.read_text().strip() if summary.exists() else ""
+        text = summary.read_text(errors="replace").strip() if summary.exists() else ""
         summary.unlink(missing_ok=True)
         return proc.returncode == 0 and bool(text), text
     return cmd, read
@@ -454,15 +507,20 @@ def hermes_organise(hermes: str, prompt: str, run_dir: Path):
     return cmd, lambda proc, _run_dir: (proc.returncode == 0 and bool(proc.stdout.strip()), proc.stdout.strip())
 
 
-def cli_connected(program: str, *names: str) -> bool:
+def cli_listed(program: str, names: list) -> list:
+    """Which of names the assistant's `mcp list` shows (as whole names, so firefox-tabs-old doesn't count)."""
     path = find_program(program)
     if not path:
-        return False
+        return []
     try:
         listed = run_cli([path, "mcp", "list"]).stdout
-    except (OSError, subprocess.TimeoutExpired):
-        return False
-    return all(n in listed for n in names)
+    except (OSError, subprocess.TimeoutExpired, ValueError):
+        return []
+    return [n for n in names if re.search(rf"(?<![\w.-]){re.escape(n)}(?![\w.-])", listed)]
+
+
+def cli_connected(program: str, *names: str) -> bool:
+    return len(cli_listed(program, list(names))) == len(names)
 
 
 def cli_connect(program: str, adds: list[tuple[str, list[str]]], remove: bool) -> tuple[bool, str]:
@@ -471,7 +529,8 @@ def cli_connect(program: str, adds: list[tuple[str, list[str]]], remove: bool) -
         run_cli([path, "mcp", "remove", name], "y\n")
         if not remove:
             run_cli([path, "mcp", "add", name, *add_args], "y\ny\n")
-    ok = cli_connected(program, *[n for n, _ in adds]) != remove
+    listed = cli_listed(program, [n for n, _ in adds])
+    ok = not listed if remove else len(listed) == len(adds)
     return ok, ("removed" if remove else "connected") if ok else ("couldn't remove; remove Kit by hand" if remove else "couldn't connect; add Kit by hand")
 
 

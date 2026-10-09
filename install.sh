@@ -62,13 +62,17 @@ if [ "${1:-}" = "--uninstall" ]; then
   if [ -f "$APP_DIR/kit.py" ]; then python3 "$APP_DIR/kit.py" unregister || true; fi
   rm -rf "$APP_DIR"
   say "Done. Remove the Kit extension itself from your browser's Add-ons page (about:addons)."
+  say "Kit's logs are kept in ${XDG_DATA_HOME:-$HOME/.local/share}/tab-bridge, and assistants' settings backups end in .before-kit; delete them if you like."
   exit 0
 fi
 
 step "1/3  Checking Python"
 # Prefer the system's own Python, so removing a conda or pyenv Python later can't break Kit.
 PYTHON=""
-for p in /usr/bin/python3 /usr/local/bin/python3 /opt/homebrew/bin/python3 "$(command -v python3 || true)"; do
+# On macOS, /usr/bin/python3 is a stub that pops up an installer unless the Command Line Tools are there.
+SYSTEM_PY=/usr/bin/python3
+if [ "$(uname -s)" = Darwin ] && ! xcode-select -p >/dev/null 2>&1; then SYSTEM_PY=""; fi
+for p in $SYSTEM_PY /usr/local/bin/python3 /opt/homebrew/bin/python3 "$(command -v python3 || true)"; do
   if [ -n "$p" ] && [ -x "$p" ] && "$p" -c 'import sys; sys.exit(sys.version_info < (3, 8))' 2>/dev/null; then PYTHON="$p"; break; fi
 done
 [ -n "$PYTHON" ] || PYTHON="$(command -v python3 || true)"
@@ -78,8 +82,10 @@ say "Using $("$PYTHON" --version 2>&1) at $PYTHON"
 
 step "2/3  Installing Kit's companion app"
 mkdir -p "$APP_DIR"
+# From a copy of the repo, use its kit.py. Piped from curl, $0 is just "sh", so download instead
+# (rather than picking up some other kit.py in the current folder).
 HERE="$(cd "$(dirname "$0")" 2>/dev/null && pwd || true)"
-if [ -n "$HERE" ] && [ -f "$HERE/kit.py" ]; then
+if [ -f "$0" ] && [ -n "$HERE" ] && [ -f "$HERE/kit.py" ] && [ -f "$HERE/extension/manifest.json" ]; then
   cp "$HERE/kit.py" "$APP_DIR/kit.py"
 else
   command -v curl >/dev/null 2>&1 || fail "curl isn't installed, so Kit can't be downloaded."

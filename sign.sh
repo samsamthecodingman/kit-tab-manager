@@ -30,7 +30,7 @@ npx --yes web-ext@10 lint --source-dir extension
 # A listed version also needs its licence and listing details (from docs/amo-listing.md).
 metadata=()
 [[ $channel == listed ]] && metadata=(--amo-metadata docs/amo-metadata.json)
-npx --yes web-ext@10 sign --channel="$channel" --source-dir extension --artifacts-dir web-ext-artifacts "${metadata[@]}"
+npx --yes web-ext@10 sign --channel="$channel" --source-dir extension --artifacts-dir web-ext-artifacts ${metadata[@]+"${metadata[@]}"}
 
 echo
 if [[ $channel == listed ]]; then
