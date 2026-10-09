@@ -47,8 +47,15 @@ function showOrganise(organise, opening = false) {
   } else {
     clearInterval(polling);
     polling = null;
-    if ((opening || justFinished) && organise.last && Date.now() - organise.last.at < RECENT_MS) status(organise.last.summary, organise.last.ok ? "ok" : "bad");
+    if (justFinished) status("");
+    const recent = organise.last && Date.now() - organise.last.at < RECENT_MS;
+    if (opening || justFinished) renderResult($("result"), recent ? organise.last : null, dismissResult);
   }
+}
+
+function dismissResult() {
+  $("result").hidden = true;
+  send({ cmd: "dismiss_result" });
 }
 
 // The picker lists only connected assistants that can organise; there's no default beyond your last choice.

@@ -200,16 +200,37 @@ async function chosenAgent(requested) {
   throw new Error("Choose which assistant should organise your tabs.");
 }
 
+// Each group's title, colour and tab count, to show what a run changed.
+async function groupSnapshot(windowId) {
+  const [groups, tabs] = await Promise.all([browser.tabGroups.query({ windowId }), browser.tabs.query({ windowId })]);
+  return groups.map((g) => ({ id: g.id, title: g.title, color: g.color, count: tabs.filter((t) => t.groupId === g.id).length }));
+}
+
+// New groups, and groups that gained tabs, biggest first.
+function groupChanges(before, after) {
+  const was = new Map(before.map((g) => [g.id, g]));
+  return after
+    .map((g) => {
+      const old = was.get(g.id);
+      return { title: g.title, color: g.color, count: g.count, created: !old, added: g.count - (old ? old.count : 0) };
+    })
+    .filter((g) => g.count > 0 && (g.created || g.added > 0))
+    .sort((a, b) => b.count - a.count);
+}
+
 async function organiseWithClaude(instructions = "", requestedAgent = "") {
   if (Organiser.running) return Organiser.running.promise;
   if (!bridgeReady) throw new Error("Connect an AI assistant first: open Kit's full page for the one-line setup.");
   const agent = await chosenAgent(requestedAgent);
   await browser.storage.local.set({ organiseAgent: agent });
   const windowId = await focusedWindowId();
+  const agentName = ((await agentList()).find((a) => a.id === agent) || {}).name || "";
+  const before = await groupSnapshot(windowId).catch(() => []);
   const run = { run_id: Date.now() };
-  run.promise = new Promise((resolve) => (run.resolve = resolve)).then((r) => {
+  run.promise = new Promise((resolve) => (run.resolve = resolve)).then(async (r) => {
     Organiser.running = null;
-    Organiser.last = { ok: r.ok, summary: r.summary, at: Date.now() };
+    const changes = groupChanges(before, await groupSnapshot(windowId).catch(() => before));
+    Organiser.last = { ok: r.ok, summary: r.summary, at: Date.now(), agent: agentName, changes };
     Mascot.end(r.ok, "All organised");
     if (!r.ok) throw new Error(r.summary);
     return r.summary;
@@ -313,6 +334,9 @@ browser.runtime.onMessage.addListener(async (msg) => {
         lists: (await loadSettings()).lists.map((l) => l.name || "Untitled list"),
         organise: { running: !!Organiser.running, last: Organiser.last },
       };
+    case "dismiss_result":
+      Organiser.last = null;
+      return null;
     case "organise":
       return organiseWithClaude(msg.instructions || "", msg.agent || "");
     case "agents": {

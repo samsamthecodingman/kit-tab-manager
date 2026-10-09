@@ -122,8 +122,7 @@ button.big { font-size: 16px; padding: 12px 20px; border-radius: 12px; }
 .pill.on { background: var(--accent-soft); color: var(--accent-text); }
 textarea { display: block; width: 100%; font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line);
   border-radius: 10px; padding: 10px 12px; resize: vertical; }
-.result { margin-top: 14px; padding: 12px 14px; border-radius: 10px; background: var(--accent-soft); color: var(--fg); }
-.result.bad { background: transparent; border: 1px solid var(--bad); color: var(--bad); }
+#organise-result { margin-top: 14px; padding: 12px 14px; font-size: 14px; background: var(--surface); }
 
 .action { display: flex; flex-direction: column; gap: 8px; }
 .action .ico { width: 28px; height: 28px; fill: none; stroke: var(--accent-text); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;

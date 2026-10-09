@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <link rel="stylesheet" href="popup.css">
+<link rel="stylesheet" href="result.css">
 </head>
 <body>
 <header>
@@ -31,6 +32,7 @@
   <textarea id="instructions" rows="2" maxlength="500" placeholder="Anything specific? (optional)" aria-label="Anything specific for the AI (optional)"></textarea>
   <button id="organise" class="primary">Organise my tabs</button>
   <p id="organise-note" class="muted small">It can group, move and rename, but can't close tabs.</p>
+  <div id="result" role="status" hidden></div>
   <p id="setup-note" class="small setup" hidden><span id="setup-text">Needs Kit's companion app.</span> <button id="setup" class="link inline">Set up (one command)</button></p>
 </section>
 
@@ -64,6 +66,7 @@
   <button id="expand-foot" class="link">Open full page</button>
 </footer>
 <script src="kit.js"></script>
+<script src="result.js"></script>
 <script src="popup.js"></script>
 </body>
 </html>

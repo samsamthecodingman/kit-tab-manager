@@ -6,6 +6,7 @@
 <title>Kit: Tab Manager</title>
 <link rel="icon" href="icons/kit-toolbar-32.png">
 <link rel="stylesheet" href="home.css">
+<link rel="stylesheet" href="result.css">
 </head>
 <body>
 <div class="page">
@@ -91,7 +92,7 @@
         <button id="organise-btn" class="primary">Organise my tabs</button>
         <p id="organise-note" class="muted small">Takes 20–60 seconds. You can keep browsing while Kit works.</p>
       </div>
-      <p id="organise-result" class="result" hidden></p>
+      <div id="organise-result" role="status" hidden></div>
     </div>
   </section>
 
@@ -194,6 +195,7 @@
 </div>
 <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 <script src="kit.js"></script>
+<script src="result.js"></script>
 <script src="home.js"></script>
 </body>
 </html>

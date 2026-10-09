@@ -62,18 +62,16 @@ function showOrganise(organise) {
   $("organise-note").textContent = busy
     ? "Organising your tabs. Kit narrates each change in the tab bar."
     : aiConnected ? "Takes 20–60 seconds. You can keep browsing while Kit works."
-    : "Connect Claude Code first: it's one command (see the top of this page).";
+    : "Connect an AI assistant first: it's one command (see the top of this page).";
   if (busy) {
     polling = polling || setInterval(refreshStatus, 2000);
   } else {
     clearInterval(polling);
     polling = null;
-    if (organise.last) {
-      const r = $("organise-result");
-      r.hidden = false;
-      r.textContent = organise.last.summary;
-      r.className = organise.last.ok ? "result" : "result bad";
-    }
+    renderResult($("organise-result"), organise.last, () => {
+      $("organise-result").hidden = true;
+      send({ cmd: "dismiss_result" });
+    });
     if (wasBusy) refreshOverview();
   }
   wasBusy = busy;
