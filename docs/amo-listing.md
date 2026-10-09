@@ -14,7 +14,7 @@ Kit: Tab manager for Claude Code
 
 *(250 characters max)*
 
-Let Claude Code see, group and tidy your Firefox tabs. One-click rules and tidy-ups, an Organise with Claude button, and Kit, a little pixel fox who walks your tab bar. Needs Claude Code and a small companion app (Linux).
+Tidy your Firefox tabs with one-click rules and tidy-ups, and Kit, a pixel fox who walks your tab bar. Connect Claude Code to let your AI assistant group and read your tabs too.
 
 ## Description
 
@@ -32,11 +32,9 @@ Kit connects Firefox to Claude Code, Anthropic's coding assistant, running on yo
 
 **Before you install**
 
-Kit needs two things on your computer (Linux for now):
-1. Claude Code, from claude.com/claude-code.
-2. Kit's small companion app, which connects Firefox to Claude Code. Setup takes a couple of minutes: github.com/samsamthecodingman/kit-tab-manager
+Kit's rules, lists, one-click tidy-ups and tab-bar walks work straight away.
 
-Without them, the rules, lists and one-click tidy-ups still work; the Claude features don't.
+The AI features (Claude Code's tab tools and Organise with Claude) also need Claude Code and Kit's small companion app on Linux or macOS. Kit's full page shows the one command that sets it up; details at github.com/samsamthecodingman/kit-tab-manager
 
 **Privacy**
 
@@ -69,12 +67,12 @@ Paste the text of [`PRIVACY.md`](../PRIVACY.md).
 
 Kit is the Firefox side of a local bridge to Claude Code (a command-line AI assistant). Full source, including the companion native messaging host, is public at https://github.com/samsamthecodingman/kit-tab-manager. Nothing is minified or bundled.
 
-How to test without the companion app: open the toolbar menu. "Say hi", the rules and lists settings page, and the Tidy up actions (apply rules, group by website, sort, collapse, close duplicates) all work on their own. The menu shows "Bridge not running", which is expected.
+How to test without the companion app: open the toolbar menu. "Say hi", the rules and lists settings page, and the Tidy up actions (apply rules, group by website, sort, collapse, close duplicates) all work on their own. The menu shows "AI not connected", which is expected.
 
 Permissions:
 - `tabs`, `tabGroups`: list, group, move, switch and close tabs.
 - `<all_urls>`: read a tab's visible text with `tabs.executeScript`, only when Claude asks (the injected code is a fixed string in background.js, no remote code).
-- `nativeMessaging`: talk to the local companion host (`host/tab_bridge_host.py`).
+- `nativeMessaging`: talk to the optional local companion app (`kit.py`, installed by `install.sh`).
 - `theme`: draw the mascot in the tab bar. Kit copies the current theme's colours, adds its frame as a background image, and resets the theme when it leaves.
 - `storage`: the user's rules and lists.
 

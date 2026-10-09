@@ -170,7 +170,7 @@ const Organiser = { running: null, last: null };
 
 async function organiseWithClaude(instructions = "") {
   if (Organiser.running) return Organiser.running.promise;
-  if (!port) throw new Error("The bridge isn't running, so Claude can't be started.");
+  if (!bridgeReady) throw new Error("Connect Claude Code first: open Kit's full page for the one-line setup.");
   const windowId = await focusedWindowId();
   const run = { run_id: Date.now() };
   run.promise = new Promise((resolve) => (run.resolve = resolve)).then((r) => {
@@ -269,7 +269,7 @@ browser.runtime.onMessage.addListener(async (msg) => {
   switch (msg && msg.cmd) {
     case "status":
       return {
-        connected: port !== null,
+        connected: bridgeReady,
         lists: (await loadSettings()).lists.map((l) => l.name || "Untitled list"),
         organise: { running: !!Organiser.running, last: Organiser.last },
       };

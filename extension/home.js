@@ -50,15 +50,19 @@ async function refreshOverview() {
 
 let polling = null;
 let wasBusy = false;
+let aiConnected = false;
+let connectPolling = null;
 function showOrganise(organise) {
   const busy = organise.running;
   for (const b of [$("organise-btn"), $("hero-organise")]) {
     b.disabled = busy;
     b.textContent = busy ? "Claude is working…" : "Organise my tabs";
   }
+  $("organise-btn").disabled = busy || !aiConnected;
   $("organise-note").textContent = busy
     ? "Claude is organising your tabs. Kit narrates each change in the tab bar."
-    : "Takes 20–60 seconds. You can keep browsing while Kit works.";
+    : aiConnected ? "Takes 20–60 seconds. You can keep browsing while Kit works."
+    : "Connect Claude Code first: it's one command (see the top of this page).";
   if (busy) {
     polling = polling || setInterval(refreshStatus, 2000);
   } else {
@@ -77,13 +81,24 @@ function showOrganise(organise) {
 
 async function refreshStatus() {
   const { connected, organise } = await send({ cmd: "status" });
+  const justConnected = connected && !aiConnected && connectPolling;
+  aiConnected = connected;
   const conn = $("conn");
   conn.className = connected ? "conn on" : "conn off";
-  conn.querySelector(".label").textContent = connected ? "Connected to Claude Code" : "Claude Code bridge not running";
+  conn.querySelector(".label").textContent = connected ? "AI assistant connected" : "AI not connected";
+  $("connect").hidden = connected;
+  // While not connected, check every few seconds so the page updates by itself after setup.
+  if (!connected && !connectPolling) connectPolling = setInterval(refreshStatus, 3000);
+  if (connected && connectPolling) { clearInterval(connectPolling); connectPolling = null; }
+  if (justConnected) toast("Connected! Claude Code can now see your tabs.");
   showOrganise(organise);
 }
 
 function organise() {
+  if (!aiConnected) {
+    $("connect").scrollIntoView({ block: "start" });
+    return;
+  }
   send({ cmd: "organise", instructions: $("instructions").value }).catch(() => {}); // outcome arrives via refreshStatus
   showOrganise({ running: true });
   $("organise").scrollIntoView({ block: "start" });
@@ -245,6 +260,14 @@ $("hero-hi").addEventListener("click", () => {
   toast("Look up: Kit is in your tab bar.");
 });
 $("hero-organise").addEventListener("click", organise);
+$("copy-cmd").addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText($("install-cmd").textContent);
+    toast("Copied. Paste it into a terminal and press Enter.");
+  } catch (e) {
+    toast("Couldn't copy; select the command instead.", true);
+  }
+});
 $("organise-btn").addEventListener("click", organise);
 document.querySelectorAll(".prompt .copy").forEach((b) => b.addEventListener("click", async () => {
   try {
@@ -265,4 +288,5 @@ $("version").textContent = `Version ${browser.runtime.getManifest().version}.`;
     // labels fall back to the step ids
   }
   await Promise.all([renderSaved(), refreshStatus(), refreshOverview()]);
+  if (location.hash === "#connect" && !aiConnected) $("connect").scrollIntoView({ block: "start" });
 })().catch((e) => toast(String((e && e.message) || e), true));

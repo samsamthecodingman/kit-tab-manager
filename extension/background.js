@@ -1,4 +1,4 @@
-// Tab Bridge: answers requests from the local native host ("tab_bridge").
+// Kit: answers requests from its companion app (native host "tab_bridge", kit.py).
 // Every request is {id, method, params}; every reply is {id, result} or {id, error}.
 // Nothing here clicks, types, navigates to new addresses or submits forms.
 
@@ -6,16 +6,18 @@ const HOST = "tab_bridge";
 const GROUP_COLORS = ["blue", "cyan", "green", "yellow", "orange", "red", "pink", "purple", "grey"];
 
 let port = null;
+let bridgeReady = false; // true once the companion app has answered; the AI features are optional
 
-function setBadge(connected) {
-  browser.browserAction.setBadgeText({ text: connected ? "" : "off" });
-  browser.browserAction.setTitle({ title: connected ? "Kit: connected to Claude Code" : "Kit: bridge not running" });
+function setConnected(ready) {
+  bridgeReady = ready;
+  browser.browserAction.setTitle({ title: ready ? "Kit: AI assistant connected" : "Kit" });
 }
 
 function connect() {
   port = browser.runtime.connectNative(HOST);
-  setBadge(true);
+  port.postMessage({ type: "ping" }); // the app answers "pong"; if it isn't installed, the port just disconnects
   port.onMessage.addListener(async (msg) => {
+    if (msg && msg.event === "pong") return setConnected(true);
     if (msg && msg.event) return onHostEvent(msg); // e.g. "Organise with Claude" finished
     const { id, method, params } = msg || {};
     const handler = Object.prototype.hasOwnProperty.call(HANDLERS, method) ? HANDLERS[method] : null;
@@ -34,7 +36,7 @@ function connect() {
   });
   port.onDisconnect.addListener(() => {
     port = null;
-    setBadge(false);
+    setConnected(false);
     onHostEvent({ event: "disconnected" });
     setTimeout(connect, 5000);
   });

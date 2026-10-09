@@ -32,12 +32,13 @@ let polling = null;
 
 // Claude can take a minute; the menu may be closed and reopened meanwhile, so it asks for news.
 let wasBusy = false;
+let aiConnected = false;
 
 function showOrganise(organise, opening = false) {
   const busy = organise.running;
   const justFinished = wasBusy && !busy;
   wasBusy = busy;
-  $("organise").disabled = busy;
+  $("organise").disabled = busy || !aiConnected;
   $("organise").textContent = busy ? "Claude is working…" : "Organise my tabs";
   if (busy) {
     status("Claude is organising your tabs. This can take a minute, and you can close this menu.");
@@ -56,8 +57,11 @@ async function refresh() {
 async function init() {
   drawHeader();
   const { connected, lists, organise } = await send({ cmd: "status" });
+  aiConnected = connected;
   showOrganise(organise, true);
-  $("conn").textContent = connected ? "Connected" : "Bridge not running";
+  $("conn").textContent = connected ? "AI assistant connected" : "AI not connected";
+  $("organise-note").hidden = !connected;
+  $("setup-note").hidden = connected;
   $("lists").replaceChildren(...lists.map((name, index) => {
     const b = document.createElement("button");
     b.textContent = name;
@@ -105,6 +109,7 @@ $("hi").addEventListener("click", sayHi);
 $("kit-hi").addEventListener("click", sayHi);
 const openHome = () => { browser.tabs.create({ url: browser.runtime.getURL("home.html") }); window.close(); };
 $("expand").addEventListener("click", openHome);
+$("setup").addEventListener("click", () => { browser.tabs.create({ url: browser.runtime.getURL("home.html#connect") }); window.close(); });
 $("expand-foot").addEventListener("click", openHome);
 $("options").addEventListener("click", () => { browser.runtime.openOptionsPage(); window.close(); });
 

@@ -85,6 +85,17 @@ button.big { font-size: 16px; padding: 12px 20px; border-radius: 12px; }
 .bubble.right { left: 8px; } .bubble.right::after { left: 22px; }
 .bubble.quiet { opacity: 0; }
 
+/* connect */
+.connect .card { border-color: var(--accent); }
+.tag { display: inline-block; vertical-align: middle; font: 600 11px/1 system-ui, sans-serif; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--accent-text); background: var(--accent-soft); padding: 5px 8px; border-radius: 999px; margin-left: 6px; }
+.cmd { display: flex; gap: 10px; align-items: center; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 8px 8px 8px 14px; }
+.cmd code { flex: 1; min-width: 0; background: none; border: 0; padding: 0; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.steps { margin: 14px 0 0; padding-left: 20px; color: var(--muted); font-size: 14px; display: grid; gap: 4px; }
+.waiting { margin-top: 14px; font-size: 14px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+.pulse { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); animation: pulse 1.6s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .25; } }
+
 /* sections */
 .block { padding: 34px 0; border-top: 1px solid var(--line); }
 .block-head { margin-bottom: 18px; max-width: 46em; }
@@ -154,5 +165,6 @@ textarea { display: block; width: 100%; font: inherit; color: inherit; backgroun
 }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
+  .pulse { animation: none; }
   button, .bubble { transition: none; }
 }

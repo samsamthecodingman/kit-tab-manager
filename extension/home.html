@@ -50,6 +50,22 @@
 </header>
 
 <main>
+  <section class="block connect" id="connect" hidden>
+    <div class="block-head">
+      <h2>Connect your AI assistant <span class="tag">Optional</span></h2>
+      <p>Kit's rules, lists and tidy-ups already work. To let Claude Code see your tabs and use <strong>Organise with Claude</strong>, run this once in a terminal on Linux or macOS:</p>
+    </div>
+    <div class="card">
+      <div class="cmd"><code id="install-cmd">curl -fsSL https://raw.githubusercontent.com/samsamthecodingman/kit-tab-manager/master/install.sh | sh</code><button id="copy-cmd" class="secondary">Copy</button></div>
+      <ol class="steps">
+        <li>Installs Kit's small companion app in your home folder. It needs <code>python3</code>, which most systems already have.</li>
+        <li>Connects it to Firefox and, if you have it installed, to Claude Code.</li>
+        <li>That's it: this section disappears by itself once Kit is connected.</li>
+      </ol>
+      <p class="waiting"><span class="pulse" aria-hidden="true"></span>Waiting for Kit's companion app…</p>
+    </div>
+  </section>
+
   <section class="block" id="organise">
     <div class="block-head">
       <h2>Organise with Claude</h2>

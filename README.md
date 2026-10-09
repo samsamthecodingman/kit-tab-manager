@@ -10,8 +10,8 @@ Let Claude Code list, group, move, switch, close and read your tabs, or tidy up 
 
 ![Firefox 142+](https://img.shields.io/badge/Firefox-142%2B-FF7139?logo=firefoxbrowser&logoColor=white)
 ![Claude Code MCP](https://img.shields.io/badge/Claude%20Code-MCP%20server-D97757)
-![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
-![Linux](https://img.shields.io/badge/platform-Linux-555)
+![Python 3.8+](https://img.shields.io/badge/Python-3.8%2B-3776AB?logo=python&logoColor=white)
+![Linux and macOS](https://img.shields.io/badge/AI%20features-Linux%20%7C%20macOS-555)
 
 <br>
 
@@ -67,8 +67,8 @@ Firefox doesn't let extensions draw on the tab bar or on built-in pages, so Kit 
 
 ```mermaid
 flowchart LR
-    CC["Claude Code"] -- stdio --> MCP["mcp/server.py<br/>MCP server"]
-    MCP -- "Unix socket<br/>(only you can open it)" --> HOST["host/tab_bridge_host.py<br/>native messaging host"]
+    CC["Claude Code<br/>(or any MCP assistant)"] -- stdio --> MCP["kit.py mcp<br/>MCP server"]
+    MCP -- "Unix socket<br/>(only you can open it)" --> HOST["kit.py<br/>companion app"]
     HOST -- "native messaging" --> EXT["extension/<br/>Firefox add-on"]
     EXT -- "tabs + tabGroups APIs" --> FF(("Firefox"))
     EXT -. "Organise with Claude" .-> HOST
@@ -78,14 +78,29 @@ flowchart LR
 | Part | What it does |
 |---|---|
 | [`extension/`](extension) | The Firefox add-on. Answers requests with the `tabs` and `tabGroups` APIs, and provides the toolbar menu, settings page and Kit. |
-| [`host/`](host) | The native messaging host. Firefox starts it when the extension loads. It listens on `$XDG_RUNTIME_DIR/tab-bridge.sock` (mode 600) and uses the Python standard library only. |
-| [`mcp/server.py`](mcp/server.py) | The MCP server Claude Code runs. Tools: `list_tabs`, `list_groups`, `group_tabs`, `ungroup_tabs`, `update_group`, `move_tabs`, `activate_tab`, `close_tabs`, `read_tab`. |
+| [`kit.py`](kit.py) | The companion app, one file using only Python's standard library. Firefox starts it when the extension loads; it listens on `$XDG_RUNTIME_DIR/tab-bridge.sock` (mode 600). `kit.py mcp` is the MCP server your AI assistant runs, with the tools `list_tabs`, `list_groups`, `group_tabs`, `ungroup_tabs`, `update_group`, `move_tabs`, `activate_tab`, `close_tabs` and `read_tab`. |
+| [`install.sh`](install.sh) | Installs `kit.py` in your home folder, registers it with Firefox and, if it's installed, Claude Code. `--uninstall` removes it all. |
 
 ## Install
 
-You need Linux, Firefox 142 or later, [Claude Code](https://claude.com/claude-code), [`uv`](https://docs.astral.sh/uv/) and Python 3.11+.
+**1. Add Kit to Firefox** (Firefox 142 or later, any system)
 
-**1. Get the code and register the companion app with Firefox**
+[Install Kit from addons.mozilla.org](https://addons.mozilla.org/firefox/addon/kit-tab-manager/). Rules, lists, the one-click tidy-ups and Kit's walks work straight away; nothing else to install.
+
+**2. Optional: connect your AI assistant** (Linux or macOS)
+
+To let [Claude Code](https://claude.com/claude-code) see your tabs and use **Organise with Claude**, run this once in a terminal:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/samsamthecodingman/kit-tab-manager/master/install.sh | sh
+```
+
+It installs Kit's companion app in your home folder (it needs `python3`, which most systems already have), registers it with Firefox, and connects Claude Code if you have it. Kit's menu then says **AI assistant connected**. Run it again any time to update; `sh install.sh --uninstall` removes it.
+
+Other assistants that support MCP can use Kit's tools too: point them at `python3 ~/.local/share/kit/kit.py mcp` (on macOS, `~/Library/Application Support/Kit/kit.py`).
+
+<details>
+<summary><b>Installing from a copy of the code instead</b></summary>
 
 ```bash
 git clone https://github.com/samsamthecodingman/kit-tab-manager.git
@@ -93,18 +108,9 @@ cd kit-tab-manager
 ./install.sh
 ```
 
-**2. Register the MCP server with Claude Code**
+To try the extension from the code, open `about:debugging` → **This Firefox** → **Load Temporary Add-on…** and pick `extension/manifest.json`. Firefox removes it when it restarts.
 
-```bash
-claude mcp add --scope user firefox-tabs -- uv run --script "$PWD/mcp/server.py"
-```
-
-**3. Install the extension**
-
-- **From addons.mozilla.org:** [install Kit](https://addons.mozilla.org/firefox/addon/kit-tab-manager/). Firefox keeps it up to date.
-- **Temporary (for development):** open `about:debugging` → **This Firefox** → **Load Temporary Add-on…** and pick `extension/manifest.json`. Firefox removes it when it restarts.
-
-The toolbar button shows **Connected to Claude Code** once everything is in place.
+</details>
 
 ## Use it
 
@@ -138,7 +144,7 @@ The toolbar button shows **Connected to Claude Code** once everything is in plac
 
 | Symptom | Fix |
 |---|---|
-| Menu says **Bridge not running** | Run `./install.sh` again, then reload the extension. Firefox starts the host only when the extension connects. |
+| Menu says **AI not connected** | That's expected if you haven't run the setup command; Kit's other features still work. If you have, run it again, then reload the extension from `about:addons`. |
 | Claude says **Firefox isn't connected** | Make sure Firefox is open and the extension is loaded (a temporary add-on disappears on restart). |
 | A tab can't be read | Firefox doesn't let extensions read built-in pages (`about:`, the PDF viewer, addons.mozilla.org). |
 | Organise with Claude fails | Check `~/.local/share/tab-bridge/organise.log`; the `detail` field has Claude's error output. |
@@ -146,7 +152,7 @@ The toolbar button shows **Connected to Claude Code** once everything is in plac
 ## Development
 
 ```bash
-uv run --with pytest pytest -q tests   # host tests
+python3 -m pytest -q tests              # companion app and MCP server tests
 npx web-ext lint --source-dir extension # check the extension
 ```
 
