@@ -74,10 +74,17 @@ function waitForLoad(tabId, timeoutMs = 20000) {
   });
 }
 
-// Runs inside the page. Prefers the main content over navigation and footers.
+// Runs inside the page. Prefers the main content over navigation and footers, but falls back
+// to the whole body when the marked region is empty or hidden (Google search has one).
 const EXTRACT = `(() => {
-  const pick = document.querySelector("main, article, [role=main]") || document.body;
-  const text = (pick ? pick.innerText : "").replace(/[ \\t]+\\n/g, "\\n").replace(/\\n{3,}/g, "\\n\\n").trim();
+  const bodyText = document.body ? document.body.innerText : "";
+  let best = "";
+  for (const el of document.querySelectorAll("main, article, [role=main]")) {
+    const t = el.innerText || "";
+    if (t.length > best.length) best = t;
+  }
+  const raw = best.trim().length >= 200 || best.length >= bodyText.length / 4 ? best : bodyText;
+  const text = raw.replace(/[ \\t]+\\n/g, "\\n").replace(/\\n{3,}/g, "\\n\\n").trim();
   return { title: document.title, url: location.href, text };
 })()`;
 
@@ -156,12 +163,16 @@ const HANDLERS = {
       await done;
       tab = await browser.tabs.get(tab_id);
     }
+    const unreadable = (detail) =>
+      new Error(`Firefox would not let the extension read this tab (${tab.url}). Built-in pages (about:, the PDF viewer, addons.mozilla.org) cannot be read. Detail: ${detail}`);
     let out;
     try {
       [out] = await browser.tabs.executeScript(tab_id, { code: EXTRACT, runAt: "document_idle" });
     } catch (e) {
-      throw new Error(`Firefox would not let the extension read this tab (${tab.url}). Built-in pages (about:, the PDF viewer, addons.mozilla.org) cannot be read. Detail: ${(e && e.message) || e}`);
+      throw unreadable((e && e.message) || e);
     }
+    // Privileged pages can resolve with no result instead of rejecting.
+    if (!out || typeof out.text !== "string") throw unreadable("the page returned no content");
     const limit = Number.isInteger(max_chars) && max_chars > 0 ? max_chars : 20000;
     const truncated = out.text.length > limit;
     return { title: out.title, url: out.url, chars: out.text.length, truncated, text: truncated ? out.text.slice(0, limit) : out.text };
