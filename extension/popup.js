@@ -23,12 +23,8 @@ async function run(button, msg) {
   }
 }
 
-function drawPixel() {
-  const ctx = $("pixel").getContext("2d");
-  const px = (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x * 2 + 3, y * 2 + 3, w * 2, h * 2); };
-  [[3, 0, 7, 1], [2, 1, 9, 1], [1, 2, 11, 6], [2, 8, 9, 2], [0, 1, 1, 3], [12, 1, 1, 3]].forEach((r) => px(...r, "#D97757"));
-  px(3, 4, 2, 2, "#2C2C2A"); px(8, 4, 2, 2, "#2C2C2A"); px(3, 4, 1, 1, "#fff"); px(8, 4, 1, 1, "#fff");
-  px(5, 7, 3, 1, "#993C1D"); px(3, 10, 2, 3, "#993C1D"); px(8, 10, 2, 3, "#993C1D");
+function drawHeader() {
+  drawKit($("kit").getContext("2d"), 0, 0, 2, "stand", false);
 }
 
 const RECENT_MS = 10 * 60 * 1000;
@@ -58,7 +54,7 @@ async function refresh() {
 }
 
 async function init() {
-  drawPixel();
+  drawHeader();
   const { connected, lists, organise } = await send({ cmd: "status" });
   showOrganise(organise, true);
   $("conn").textContent = connected ? "Connected to Claude Code" : "Bridge not running";

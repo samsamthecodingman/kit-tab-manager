@@ -1,12 +1,12 @@
 {
   "manifest_version": 2,
   "name": "Tab Bridge",
-  "version": "0.4.0",
-  "description": "Lets Claude Code list, group, move, close and read your Firefox tabs through a local bridge, with one-click tidy-ups and Pixel, a tab-bar mascot. It never clicks, types or submits anything.",
+  "version": "0.5.0",
+  "description": "Lets Claude Code list, group, move, close and read your Firefox tabs through a local bridge, with one-click tidy-ups and Kit, a tab-bar mascot. It never clicks, types or submits anything.",
   "icons": {
-    "48": "icons/pixel-48.png",
-    "96": "icons/pixel-96.png",
-    "128": "icons/pixel-128.png"
+    "48": "icons/kit-48.png",
+    "96": "icons/kit-96.png",
+    "128": "icons/kit-128.png"
   },
   "browser_specific_settings": {
     "gecko": {
@@ -30,6 +30,7 @@
   ],
   "background": {
     "scripts": [
+      "kit.js",
       "mascot.js",
       "background.js",
       "actions.js"
@@ -40,8 +41,8 @@
     "default_title": "Tab Bridge",
     "default_popup": "popup.html",
     "default_icon": {
-      "32": "icons/pixel-32.png",
-      "48": "icons/pixel-48.png"
+      "16": "icons/kit-toolbar-16.png",
+      "32": "icons/kit-toolbar-32.png"
     }
   },
   "options_ui": {

@@ -2,3 +2,4 @@ __pycache__/
 .pytest_cache/
 *.xpi
 web-ext-artifacts/
+.amo-upload-uuid

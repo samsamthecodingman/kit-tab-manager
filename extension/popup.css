@@ -11,7 +11,7 @@
 [hidden] { display: none !important; }
 body { margin: 0; width: 300px; background: var(--bg); color: var(--fg); font: 13px/1.4 system-ui, sans-serif; }
 header { display: flex; gap: 10px; align-items: center; padding: 12px 14px; border-bottom: 1px solid var(--line); }
-#pixel { width: 32px; height: 32px; image-rendering: pixelated; }
+#kit { width: 34px; height: 30px; image-rendering: pixelated; }
 h1 { font-size: 14px; font-weight: 600; margin: 0; }
 h2 { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0 0 6px; }
 section { padding: 10px 14px; border-bottom: 1px solid var(--line); }

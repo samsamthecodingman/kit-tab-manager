@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/pixel.svg" width="96" height="96" alt="Pixel, the Tab Bridge mascot">
+<img src="docs/kit.svg" width="119" alt="Kit, the Tab Bridge mascot: a little Claude-orange creature in a Firefox-orange fox hoodie">
 
 # Tab Bridge
 
@@ -15,9 +15,9 @@ List, group, move, switch, close and read tabs from Claude Code, or tidy up in o
 
 <br>
 
-<img src="docs/pixel-tab-bar.gif" alt="Pixel walking along the Firefox tab bar, saying 'Grouping 2 tabs → Theory', then 'Done'" width="100%">
+<img src="docs/kit-tab-bar.gif" alt="Kit walking along the Firefox tab bar, saying 'Grouping 2 tabs → Theory', then 'Done'" width="100%">
 
-<sub>Pixel walks along your tab bar and narrates while tabs change, on every page.</sub>
+<sub>Kit walks along your tab bar and narrates while tabs change, on every page.</sub>
 
 </div>
 
@@ -26,6 +26,7 @@ List, group, move, switch, close and read tabs from Claude Code, or tidy up in o
 ## Contents
 
 - [Features](#features)
+- [Meet Kit](#meet-kit)
 - [How it works](#how-it-works)
 - [Install](#install)
 - [Use it](#use-it)
@@ -42,7 +43,7 @@ List, group, move, switch, close and read tabs from Claude Code, or tidy up in o
 | 📏 **Your own rules** | "Titles containing *week* go in **Theory**", "edstem.org goes in **Moodle+EdStem**". Apply them in one click, offline and free. Rules can be suggested from the groups you already have. |
 | 🧹 **One-click tidy-ups** | Group loose tabs by website, sort tabs within groups, collapse all groups, and close duplicate tabs (after showing you which). |
 | 📋 **Action lists** | Chain steps into a named button, like **Study mode**: apply my rules, then collapse everything except Theory. |
-| 👾 **Pixel** | A small pixel-art mascot walks along the tab bar and says what's happening. It never changes your theme's colours. |
+| 🦊 **Kit** | A little pixel-art mascot walks along the tab bar and says what's happening. It never changes your theme's colours. |
 
 <table>
   <tr>
@@ -50,6 +51,14 @@ List, group, move, switch, close and read tabs from Claude Code, or tidy up in o
     <td align="center"><img src="docs/settings.png" alt="The rules and lists settings page" width="100%"><br><sub>Rules and lists</sub></td>
   </tr>
 </table>
+
+## Meet Kit
+
+<img src="docs/kit-tab-bar.png" alt="Kit standing in the tab bar next to a speech bubble saying 'Grouping 2 tabs → Theory'" width="100%">
+
+Kit is half Claude, half Firefox: a little Claude-orange creature in a Firefox-orange fox hoodie, complete with hood ears and a bushy tail. Whenever your tabs change, Kit walks in along the tab bar, stops to say what it's doing, then walks off, always facing the way it's going.
+
+Firefox doesn't let extensions draw on the tab bar or on built-in pages, so Kit is drawn as a temporary background on a copy of your current theme. That's why Kit shows up on every page, including `about:` pages and PDFs, why it hops rather than glides, and why your colours never change. If your system is set to reduce motion, Kit appears in place instead of walking.
 
 ## How it works
 
@@ -65,7 +74,7 @@ flowchart LR
 
 | Part | What it does |
 |---|---|
-| [`extension/`](extension) | The Firefox add-on. Answers requests with the `tabs` and `tabGroups` APIs, and provides the toolbar menu, settings page and Pixel. |
+| [`extension/`](extension) | The Firefox add-on. Answers requests with the `tabs` and `tabGroups` APIs, and provides the toolbar menu, settings page and Kit. |
 | [`host/`](host) | The native messaging host. Firefox starts it when the extension loads. It listens on `$XDG_RUNTIME_DIR/tab-bridge.sock` (mode 600) and uses the Python standard library only. |
 | [`mcp/server.py`](mcp/server.py) | The MCP server Claude Code runs. Tools: `list_tabs`, `list_groups`, `group_tabs`, `ungroup_tabs`, `update_group`, `move_tabs`, `activate_tab`, `close_tabs`, `read_tab`. |
 
@@ -108,7 +117,7 @@ The toolbar button shows **Connected to Claude Code** once everything is in plac
 - **Tidy up** runs the one-click actions.
 - **My lists** runs your saved action lists.
 - **Rules & lists** opens the settings page.
-- **Say hi** brings Pixel out without touching any tabs.
+- **Say hi** brings Kit out without touching any tabs.
 
 ## Safety and privacy
 

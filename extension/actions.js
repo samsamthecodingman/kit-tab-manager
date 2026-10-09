@@ -1,6 +1,6 @@
 // Toolbar menu actions: your grouping rules, one-click tidy-ups and saved action lists.
 // They run here in the background page (so they finish even if the menu closes) and reuse
-// the bridge HANDLERS, with Pixel narrating each one.
+// the bridge HANDLERS, with Kit narrating each one.
 
 const STEP_TYPES = {
   apply_rules: { label: "Apply my rules" },
@@ -54,8 +54,8 @@ async function groupTitles(windowId) {
   return new Map(groups.map((g) => [g.id, (g.title || "").toLowerCase()]));
 }
 
-// Runs fn with Pixel on screen; fn returns the text Pixel says when done.
-async function withPixel(windowId, label, fn) {
+// Runs fn with Kit out in the tab bar; fn returns the text Kit says when done.
+async function withKit(windowId, label, fn) {
   Mascot.begin(windowId, label);
   let ok = false, said = "Done";
   try {
@@ -165,7 +165,7 @@ const ACTION_LABELS = {
 };
 
 // "Organise with Claude": the native host runs Claude Code headless with only the grouping
-// tools; its changes come back through the bridge, so Pixel narrates them as they happen.
+// tools; its changes come back through the bridge, so Kit narrates them as they happen.
 const Organiser = { running: null, last: null };
 
 async function organiseWithClaude(instructions = "") {
@@ -254,7 +254,7 @@ async function runList(index) {
   const list = lists[index];
   if (!list) throw new Error("that list no longer exists");
   const windowId = await focusedWindowId();
-  return withPixel(windowId, `Running ${list.name || "your list"}`, async () => {
+  return withKit(windowId, `Running ${list.name || "your list"}`, async () => {
     for (const step of list.steps || []) {
       if (step.type === "collapse_all_except") await ACTIONS.collapse_all(windowId, step.arg || "");
       else if (step.type === "organise_with_claude") await organiseWithClaude(step.arg || "");
@@ -282,11 +282,11 @@ browser.runtime.onMessage.addListener(async (msg) => {
     }
     case "action":
       if (!Object.prototype.hasOwnProperty.call(ACTIONS, msg.action)) throw new Error("unknown action");
-      return withPixel(windowId, ACTION_LABELS[msg.action], () => ACTIONS[msg.action](windowId, msg.arg || ""));
+      return withKit(windowId, ACTION_LABELS[msg.action], () => ACTIONS[msg.action](windowId, msg.arg || ""));
     case "find_duplicates":
       return findDuplicates(windowId);
     case "close_tabs":
-      return withPixel(windowId, `Closing ${plural(msg.tab_ids.length, "tab")}`, async () => {
+      return withKit(windowId, `Closing ${plural(msg.tab_ids.length, "tab")}`, async () => {
         await HANDLERS.close_tabs({ tab_ids: msg.tab_ids });
         return `Closed ${plural(msg.tab_ids.length, "tab")}`;
       });
