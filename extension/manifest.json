@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Kit: Tab Manager",
-  "version": "0.8.1",
+  "version": "0.8.2",
   "description": "Tidy your tabs with rules, lists and one-click tidy-ups, or let your AI assistant (Claude Code today) sort them. It never clicks, types or submits anything.",
   "homepage_url": "https://github.com/samsamthecodingman/kit-tab-manager",
   "icons": {

@@ -38,10 +38,7 @@ function isLight(v) {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.5;
 }
 
-// Same hue and saturation, lightness mirrored (light blue -> dark navy, dark text -> light text).
-function flipLightness(v) {
-  const c = parseColor(v);
-  if (!c) return v;
+function toHsl(c) {
   const [r, g, b] = c.map((n) => n / 255);
   const max = Math.max(r, g, b), min = Math.min(r, g, b), l = (max + min) / 2, d = max - min;
   let h = 0, sat = 0;
@@ -49,9 +46,43 @@ function flipLightness(v) {
     sat = d / (1 - Math.abs(2 * l - 1));
     h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
   }
-  const L = 1 - l, C = (1 - Math.abs(2 * L - 1)) * sat, X = C * (1 - Math.abs((h % 2 + 2) % 2 - 1)), m = L - C / 2;
-  const [r1, g1, b1] = [[C, X, 0], [X, C, 0], [0, C, X], [0, X, C], [X, 0, C], [C, 0, X]][Math.floor((h + 6) % 6)];
-  return `rgb(${[r1, g1, b1].map((n) => Math.round((n + m) * 255)).join(", ")})`;
+  return [h, sat, l]; // h in sixths of a turn
+}
+
+function fromHsl(h, sat, l) {
+  const C = (1 - Math.abs(2 * l - 1)) * sat, X = C * (1 - Math.abs((h % 2 + 2) % 2 - 1)), m = l - C / 2;
+  const [r, g, b] = [[C, X, 0], [X, C, 0], [0, C, X], [0, X, C], [X, 0, C], [C, 0, X]][Math.floor((h + 6) % 6)];
+  return `rgb(${[r, g, b].map((n) => Math.round((n + m) * 255)).join(", ")})`;
+}
+
+// Same hue and saturation, lightness mirrored (dark text -> light text).
+function flipLightness(v) {
+  const c = parseColor(v);
+  if (!c) return v;
+  const [h, sat, l] = toHsl(c);
+  return fromHsl(h, sat, 1 - l);
+}
+
+// How light each background is in a Firefox dark theme. Dark versions of themes (Mozilla's
+// colourways, Firefox's own dark theme) keep their backgrounds at about these levels, whatever
+// the light version looks like, and only hint at the theme's colour.
+const DARK_BACKGROUNDS = {
+  frame: 0.11, frame_inactive: 0.11, toolbar: 0.17, tab_selected: 0.25, ntp_background: 0.17,
+  popup: 0.09, sidebar: 0.09, toolbar_field: 0.09, toolbar_field_focus: 0.09, ntp_card_background: 0.09,
+  popup_highlight: 0.3, sidebar_highlight: 0.3,
+};
+
+// A dark version of one of a theme's light colours (tint: the hue and saturation of the theme's
+// frame). Backgrounds become the levels above in a muted version of their hue, or the frame's
+// hue if they have none (white); text and icons become light; lines have their lightness mirrored.
+function darkVersion(key, v, tint) {
+  const c = parseColor(v);
+  if (!c) return v;
+  let [h, sat, l] = toHsl(c);
+  if (sat < 0.05 && tint) [h, sat] = tint;
+  if (key in DARK_BACKGROUNDS) return fromHsl(h, sat * 0.7, DARK_BACKGROUNDS[key]);
+  if (/_text$|^icons/.test(key)) return fromHsl(h, sat, Math.max(1 - l, 0.85));
+  return fromHsl(h, sat, 1 - l);
 }
 
 const BASE_PALETTE = {
@@ -386,10 +417,13 @@ const Mascot = {
       let colors = builtIn ? { ...BASE_PALETTE[scheme] } : own;
       // Themes with separate light and dark versions (like Mozilla's colour themes) report only
       // their light colours here, even while Firefox shows the dark version. When the copy's
-      // brightness doesn't match the mode Firefox is in, flip each colour's lightness (keeping its
-      // hue), which comes out close to the theme's own dark version.
+      // brightness doesn't match the mode Firefox is in, rebuild it: in dark mode, as a dark
+      // version (see darkVersion); otherwise each colour's lightness is mirrored.
       if (!builtIn && isLight(colors.frame || colors.toolbar) !== (scheme === "light")) {
-        colors = Object.fromEntries(Object.entries(colors).map(([k, v]) => [k, flipLightness(v)]));
+        const frame = parseColor(colors.frame || colors.toolbar);
+        const tint = frame && toHsl(frame).slice(0, 2);
+        const convert = scheme === "dark" ? (k, v) => darkVersion(k, v, tint) : (k, v) => flipLightness(v);
+        colors = Object.fromEntries(Object.entries(colors).map(([k, v]) => [k, convert(k, v)]));
       }
       const theme = { colors };
       if (Object.keys(set(current.images)).length) theme.images = set(current.images);
