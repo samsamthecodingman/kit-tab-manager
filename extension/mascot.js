@@ -93,6 +93,7 @@ const ICON_FRAMES = [false, true].map((alt) => ({ 16: iconFrame(16, alt), 32: ic
 // when it changes.
 const TAB_BAR_FRAME_MS = 80;
 const TAB_BAR_HOP = 24; // px per visible hop; fewer distinct pictures means less flicker
+const TAB_BAR_OVERLAP_MS = 16; // how long a new picture sits over the previous one while it loads (about one screen refresh)
 const TAB_BAR_HOLD_MS = 1600; // each bubble stays up this long once Kit stands still
 const TabBarKit = {
   active: false,
@@ -105,7 +106,7 @@ const TabBarKit = {
   onArrive: null,
   leaving: null,
   shown: null,
-  layered: false,
+  overlapTimer: null,
   cache: new Map(),
   waiters: [],
   facingLeft: true,
@@ -157,7 +158,7 @@ const TabBarKit = {
     clearInterval(this.timer);
     this.timer = null;
     this.shown = null;
-    this.layered = false;
+    clearTimeout(this.overlapTimer);
     this.active = false;
     this.flushWaiters();
     this.onArrive = null;
@@ -173,16 +174,15 @@ const TabBarKit = {
       if (moving) this.facingLeft = gap < 0; // Kit faces the way it walks, and keeps facing that way when it stops
       this.x = reduce || Math.abs(gap) <= step ? this.target : this.x + Math.sign(gap) * step;
       // Firefox blanks a new picture until it has loaded, so only send one when it differs from
-      // the one showing, and layer it over the previous picture for one frame so there is always
-      // a Kit on screen while it loads. The next frame drops the previous picture again.
+      // the one showing, and layer it over the previous picture just long enough to load
+      // (TAB_BAR_OVERLAP_MS), so there's always a Kit on screen without a visible double image.
       const url = this.frameUrl(moving && !reduce);
       if (url !== this.shown) {
-        this.layered = !!this.shown;
-        Mascot.applyTheme(this.layered ? [url, this.shown] : [url]);
+        const previous = this.shown;
+        Mascot.applyTheme(previous ? [url, previous] : [url]);
         this.shown = url;
-      } else if (this.layered) {
-        Mascot.applyTheme([url]);
-        this.layered = false;
+        clearTimeout(this.overlapTimer);
+        if (previous) this.overlapTimer = setTimeout(() => this.shown === url && Mascot.applyTheme([url]), TAB_BAR_OVERLAP_MS);
       }
       if (!moving) this.flushWaiters();
       if (!moving && this.onArrive) this.onArrive();

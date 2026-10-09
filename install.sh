@@ -1,6 +1,7 @@
 #!/bin/sh
 # Installs Kit's companion app, so Kit's AI features (Claude Code's tab tools and
-# "Organise with Claude") work. Kit's rules, lists and tidy-ups work without it.
+# "Organise with Claude") work in Firefox, LibreWolf, Floorp, Waterfox and Zen.
+# Kit's rules, lists and tidy-ups work without it.
 #
 #   curl -fsSL https://raw.githubusercontent.com/samsamthecodingman/kit-tab-manager/master/install.sh | sh
 #   ./install.sh              (from a copy of the repo)
@@ -8,7 +9,7 @@
 #
 # It needs python3 (already on most Linux and macOS systems) and changes only files in your home folder:
 #   - kit.py and a small launcher in Kit's folder (see APP_DIR below)
-#   - Firefox's native messaging registration for Kit
+#   - the native messaging registration for Kit, for Firefox and each Firefox-based browser found
 #   - Claude Code's MCP server list, if Claude Code is installed (`claude mcp add`)
 set -eu
 
@@ -25,27 +26,43 @@ fail() { printf '\nKit setup stopped: %s\n' "$*" >&2; exit 1; }
 case "$(uname -s)" in
   Linux)
     APP_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/kit"
-    FIREFOX_DIRS="$HOME/.mozilla/native-messaging-hosts ${XDG_CONFIG_HOME:-$HOME/.config}/mozilla/native-messaging-hosts"
     ;;
   Darwin)
     APP_DIR="$HOME/Library/Application Support/Kit"
-    FIREFOX_DIRS="$HOME/Library/Application Support/Mozilla/NativeMessagingHosts"
     ;;
-  *) fail "Kit's companion app supports Linux and macOS so far. Kit's rules and tidy-ups still work in Firefox without it." ;;
+  *) fail "Kit's companion app supports Linux and macOS so far. Kit's rules and tidy-ups still work in your browser without it." ;;
 esac
 LAUNCHER="$APP_DIR/kit-host"
 
-for_each_firefox_dir() { # runs "$1 <dir>" for each Firefox registration folder (they can contain spaces)
-  if [ "$(uname -s)" = Darwin ]; then "$1" "$FIREFOX_DIRS"; else for d in $FIREFOX_DIRS; do "$1" "$d"; done; fi
+# Where each browser looks for companion apps, one "name|folder" per line. Firefox's are always
+# used; a Firefox-based browser's only if that browser has been run (its profile folder exists).
+browser_dirs() {
+  if [ "$(uname -s)" = Darwin ]; then
+    sup="$HOME/Library/Application Support"
+    echo "Firefox|$sup/Mozilla/NativeMessagingHosts"
+    for b in LibreWolf:LibreWolf Floorp:Floorp Waterfox:Waterfox Zen:zen; do # display name:folder
+      [ -d "$sup/${b#*:}" ] && echo "${b%%:*}|$sup/${b#*:}/NativeMessagingHosts"
+    done
+  else
+    echo "Firefox|$HOME/.mozilla/native-messaging-hosts"
+    echo "Firefox|${XDG_CONFIG_HOME:-$HOME/.config}/mozilla/native-messaging-hosts"
+    for b in LibreWolf:librewolf Floorp:floorp Waterfox:waterfox Zen:zen; do # display name:folder
+      [ -d "$HOME/.${b#*:}" ] && echo "${b%%:*}|$HOME/.${b#*:}/native-messaging-hosts"
+    done
+  fi
+  return 0
+}
+for_each_browser_dir() { # runs "$1 <browser> <folder>" for each registration folder (folders can contain spaces)
+  browser_dirs | while IFS='|' read -r name dir; do "$1" "$name" "$dir"; done
 }
 
 if [ "${1:-}" = "--uninstall" ]; then
   step "Removing Kit's companion app"
-  remove_manifest() { rm -f "$1/$HOST_NAME.json"; }
-  for_each_firefox_dir remove_manifest
+  remove_manifest() { rm -f "$2/$HOST_NAME.json"; }
+  for_each_browser_dir remove_manifest
   rm -rf "$APP_DIR"
   if command -v claude >/dev/null 2>&1; then claude mcp remove "$MCP_NAME" -s user >/dev/null 2>&1 || true; fi
-  say "Done. Remove the Kit extension itself from Firefox's Add-ons page (about:addons)."
+  say "Done. Remove the Kit extension itself from your browser's Add-ons page (about:addons)."
   exit 0
 fi
 
@@ -69,14 +86,14 @@ else
   command -v curl >/dev/null 2>&1 || fail "curl isn't installed, so Kit can't be downloaded."
   curl -fsSL "$REPO_RAW/kit.py" -o "$APP_DIR/kit.py" || fail "couldn't download kit.py from GitHub."
 fi
-# Firefox starts this launcher with a bare environment, so it names python3 by its full path.
+# The browser starts this launcher with a bare environment, so it names python3 by its full path.
 printf '#!/bin/sh\nexec "%s" "%s" "$@"\n' "$PYTHON" "$APP_DIR/kit.py" > "$LAUNCHER"
 chmod 755 "$LAUNCHER" "$APP_DIR/kit.py"
 say "Installed $("$PYTHON" "$APP_DIR/kit.py" --version) in $APP_DIR"
 
 write_manifest() {
-  mkdir -p "$1"
-  cat > "$1/$HOST_NAME.json" <<EOF
+  mkdir -p "$2"
+  cat > "$2/$HOST_NAME.json" <<EOF
 {
   "name": "$HOST_NAME",
   "description": "Kit companion app",
@@ -85,9 +102,9 @@ write_manifest() {
   "allowed_extensions": ["$EXTENSION_ID"]
 }
 EOF
-  say "Registered with Firefox in $1"
+  say "Registered with $1 in $2"
 }
-for_each_firefox_dir write_manifest
+for_each_browser_dir write_manifest
 
 step "3/3  Connecting your AI assistant"
 if command -v claude >/dev/null 2>&1; then
@@ -102,5 +119,5 @@ say "Other MCP-compatible assistants can use Kit too: point them at"
 say "    $PYTHON \"$APP_DIR/kit.py\" mcp"
 
 step "All set."
-say "If you haven't yet, add the Kit extension to Firefox: $LISTING"
+say "If you haven't yet, add the Kit extension to your browser: $LISTING"
 say "Kit's menu shows \"Connected\" within a few seconds (reload the extension if it doesn't)."

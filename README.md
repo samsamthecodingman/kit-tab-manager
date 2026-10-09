@@ -4,7 +4,7 @@
 
 # Kit
 
-**A tab manager for Firefox, with an AI assistant when you want one.**
+**A tab manager for Firefox, LibreWolf, Floorp, Waterfox and Zen, with an AI assistant when you want one.**
 
 Works with Claude Code today, with more AI assistants to come.
 
@@ -41,7 +41,7 @@ Let Claude Code list, group, move, switch, close and read your tabs, or tidy up 
 | | |
 |---|---|
 | 🗂️ **Tabs as tools for Claude** | Claude Code can list your tabs and groups, group and ungroup, rename and recolour groups, move and switch tabs, close tabs, and read a tab's text. |
-| ✨ **Organise with Claude** | One button in Firefox asks Claude to sort your tabs into sensible groups, without opening a chat. Add an optional instruction like "keep work and personal apart". |
+| ✨ **Organise with Claude** | One button in your browser asks Claude to sort your tabs into sensible groups, without opening a chat. Add an optional instruction like "keep work and personal apart". |
 | 📏 **Your own rules** | "Titles containing *recipe* go in **Cooking**", "github.com goes in **Code**". Apply them in one click, offline and free. Rules can be suggested from the groups you already have. |
 | 🧹 **One-click tidy-ups** | Group loose tabs by website, sort tabs within groups, collapse all groups, and close duplicate tabs (after showing you which). |
 | 📋 **Action lists** | Chain steps into a named button, like **Focus mode**: apply my rules, then collapse everything except Code. |
@@ -65,29 +65,41 @@ Kit is half Claude, half Firefox: a little Claude-orange creature in a Firefox-o
 
 Firefox doesn't let extensions draw on the tab bar or on built-in pages, so Kit is drawn as a temporary background on a copy of your current theme. That's why Kit shows up on every page, including `about:` pages and PDFs, why it hops rather than glides, and why your colours never change. If your system is set to reduce motion, Kit appears in place instead of walking.
 
+## Works in
+
+| Browser | Notes |
+|---|---|
+| Firefox | Including Developer Edition, Nightly and ESR 153. |
+| LibreWolf | |
+| Floorp | |
+| Waterfox | |
+| Zen | Zen shows tabs in a vertical sidebar, so Kit's walk along the tab bar may look different there. |
+
+Chrome, Edge and other Chromium browsers aren't supported yet.
+
 ## How it works
 
 ```mermaid
 flowchart LR
     CC["Claude Code<br/>(or any MCP assistant)"] -- stdio --> MCP["kit.py mcp<br/>MCP server"]
     MCP -- "Unix socket<br/>(only you can open it)" --> HOST["kit.py<br/>companion app"]
-    HOST -- "native messaging" --> EXT["extension/<br/>Firefox add-on"]
-    EXT -- "tabs + tabGroups APIs" --> FF(("Firefox"))
+    HOST -- "native messaging" --> EXT["extension/<br/>browser add-on"]
+    EXT -- "tabs + tabGroups APIs" --> FF(("Your browser"))
     EXT -. "Organise with Claude" .-> HOST
     HOST -. "claude -p<br/>(grouping tools only)" .-> CC
 ```
 
 | Part | What it does |
 |---|---|
-| [`extension/`](extension) | The Firefox add-on. Answers requests with the `tabs` and `tabGroups` APIs, and provides the toolbar menu, settings page and Kit. |
-| [`kit.py`](kit.py) | The companion app, one file using only Python's standard library. Firefox starts it when the extension loads; it listens on `$XDG_RUNTIME_DIR/tab-bridge.sock` (mode 600). `kit.py mcp` is the MCP server your AI assistant runs, with the tools `list_tabs`, `list_groups`, `group_tabs`, `ungroup_tabs`, `update_group`, `move_tabs`, `activate_tab`, `close_tabs` and `read_tab`. |
-| [`install.sh`](install.sh) | Installs `kit.py` in your home folder, registers it with Firefox and, if it's installed, Claude Code. `--uninstall` removes it all. |
+| [`extension/`](extension) | The browser add-on (one add-on for Firefox and the Firefox-based browsers). Answers requests with the `tabs` and `tabGroups` APIs, and provides the toolbar menu, settings page and Kit. |
+| [`kit.py`](kit.py) | The companion app, one file using only Python's standard library. Your browser starts it when the extension loads; it listens on `$XDG_RUNTIME_DIR/tab-bridge.sock` (mode 600). `kit.py mcp` is the MCP server your AI assistant runs, with the tools `list_tabs`, `list_groups`, `group_tabs`, `ungroup_tabs`, `update_group`, `move_tabs`, `activate_tab`, `close_tabs` and `read_tab`. |
+| [`install.sh`](install.sh) | Installs `kit.py` in your home folder, registers it with each of Firefox, LibreWolf, Floorp, Waterfox and Zen that it finds and, if it's installed, Claude Code. `--uninstall` removes it all. |
 
 ## Install
 
-**1. Add Kit to Firefox** (Firefox 142 or later, any system)
+**1. Add Kit to your browser** (Firefox, LibreWolf, Floorp, Waterfox and Zen, on any system)
 
-[Install Kit from addons.mozilla.org](https://addons.mozilla.org/firefox/addon/kit-tab-manager/). Rules, lists, the one-click tidy-ups and Kit's walks work straight away; nothing else to install.
+[Install Kit from addons.mozilla.org](https://addons.mozilla.org/firefox/addon/kit-tab-manager/); the Firefox-based browsers install add-ons from there too. Kit needs a browser built on Firefox 142 or newer, which all of these are. Rules, lists, the one-click tidy-ups and Kit's walks work straight away; nothing else to install.
 
 **2. Optional: connect your AI assistant** (Linux or macOS)
 
@@ -97,7 +109,7 @@ To let [Claude Code](https://claude.com/claude-code) see your tabs and use **Org
 curl -fsSL https://raw.githubusercontent.com/samsamthecodingman/kit-tab-manager/master/install.sh | sh
 ```
 
-It installs Kit's companion app in your home folder (it needs `python3`, which most systems already have), registers it with Firefox, and connects Claude Code if you have it. Kit's menu then says **AI assistant connected**. Run it again any time to update; `sh install.sh --uninstall` removes it.
+It installs Kit's companion app in your home folder (it needs `python3`, which most systems already have), registers it with your browsers, and connects Claude Code if you have it. Kit's menu then says **AI assistant connected**. Run it again any time to update; `sh install.sh --uninstall` removes it.
 
 Other assistants that support MCP can use Kit's tools too: point them at `python3 ~/.local/share/kit/kit.py mcp` (on macOS, `~/Library/Application Support/Kit/kit.py`).
 
@@ -124,7 +136,7 @@ To try the extension from the code, open `about:debugging` → **This Firefox** 
 >
 > *Close the duplicate GitHub tabs.*
 
-**From Firefox**, click the Kit button:
+**From your browser**, click the Kit button:
 
 - **Organise my tabs** asks Claude to group everything. It takes 20–60 seconds; you can close the menu while it works, and the summary is waiting when you reopen it.
 - **Tidy up** runs the one-click actions.

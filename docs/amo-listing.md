@@ -14,11 +14,11 @@ Kit: Tab Manager
 
 *(250 characters max)*
 
-Tidy your Firefox tabs with one-click rules and tidy-ups, and Kit, a pixel fox who walks your tab bar. Connect Claude Code to let your AI assistant group and read your tabs too.
+Tidy your tabs with one-click rules and tidy-ups, and Kit, a pixel fox who walks your tab bar. Connect Claude Code to let your AI assistant group and read your tabs too.
 
 ## Description
 
-Kit is a tab manager for Firefox. It tidies your tabs on its own, and connects to your AI assistant when you want something smarter: Claude Code today, with more assistants to come. Ask Claude to group your research tabs, find the tab with your notes, or summarise the page you have open, and it can.
+Kit is a tab manager for Firefox, LibreWolf, Floorp, Waterfox and Zen. It tidies your tabs on its own, and connects to your AI assistant when you want something smarter: Claude Code today, with more assistants to come. Ask Claude to group your research tabs, find the tab with your notes, or summarise the page you have open, and it can.
 
 **What you get**
 
@@ -65,7 +65,7 @@ Paste the text of [`PRIVACY.md`](../PRIVACY.md).
 
 ## Notes to reviewer
 
-Kit is the Firefox side of a local bridge to Claude Code (a command-line AI assistant). Full source, including the companion native messaging host, is public at https://github.com/samsamthecodingman/kit-tab-manager. Nothing is minified or bundled.
+Kit is the browser side of a local bridge to Claude Code (a command-line AI assistant). Full source, including the companion native messaging host, is public at https://github.com/samsamthecodingman/kit-tab-manager. Nothing is minified or bundled.
 
 How to test without the companion app: open the toolbar menu. "Say hi", the rules and lists settings page, and the Tidy up actions (apply rules, group by website, sort, collapse, close duplicates) all work on their own. The menu shows "AI not connected", which is expected.
 
