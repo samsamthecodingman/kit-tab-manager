@@ -33,12 +33,13 @@ let polling = null;
 // Organising can take a minute; the menu may be closed and reopened meanwhile, so it asks for news.
 let wasBusy = false;
 let aiConnected = false;
+let canOrganise = false; // connected, and an assistant that can organise is picked
 
 function showOrganise(organise, opening = false) {
   const busy = organise.running;
   const justFinished = wasBusy && !busy;
   wasBusy = busy;
-  $("organise").disabled = busy || !aiConnected;
+  $("organise").disabled = busy || !canOrganise;
   $("organise").textContent = busy ? "Organising…" : "Organise my tabs";
   if (busy) {
     status("Organising your tabs. This can take a minute, and you can close this menu.");
@@ -49,6 +50,31 @@ function showOrganise(organise, opening = false) {
     if ((opening || justFinished) && organise.last && Date.now() - organise.last.at < RECENT_MS) status(organise.last.summary, organise.last.ok ? "ok" : "bad");
   }
 }
+
+// The picker lists only connected assistants that can organise; there's no default beyond your last choice.
+function showAgents({ agents, chosen }) {
+  const usable = agents.filter((a) => a.connected && a.can_organise);
+  const select = $("agent");
+  const options = usable.map((a) => Object.assign(document.createElement("option"), { value: a.id, textContent: a.name }));
+  const pick = usable.some((a) => a.id === chosen) ? chosen : usable.length === 1 ? usable[0].id : "";
+  if (usable.length > 1 && !pick) options.unshift(Object.assign(document.createElement("option"), { value: "", textContent: "Choose an assistant…" }));
+  if (!usable.length) options.push(Object.assign(document.createElement("option"), { value: "", textContent: "No assistant connected" }));
+  select.replaceChildren(...options);
+  select.value = pick;
+  select.disabled = usable.length === 0;
+  canOrganise = !!pick;
+  $("organise").disabled = !canOrganise || wasBusy;
+  $("organise-note").hidden = usable.length === 0;
+  $("setup-note").hidden = usable.length > 0;
+  $("setup-text").textContent = "Connect Claude Code, Codex or Hermes Agent to use this.";
+  $("setup").textContent = "Connect one";
+}
+
+$("agent").addEventListener("change", (e) => {
+  canOrganise = !!e.target.value;
+  $("organise").disabled = !canOrganise || wasBusy;
+  if (e.target.value) send({ cmd: "choose_agent", id: e.target.value });
+});
 
 async function refresh() {
   showOrganise((await send({ cmd: "status" })).organise);
@@ -69,6 +95,7 @@ async function init() {
     return b;
   }));
   $("no-lists").hidden = lists.length > 0;
+  if (connected) showAgents(await send({ cmd: "agents" })); // can take a few seconds the first time
 }
 
 document.querySelectorAll("[data-action]").forEach((b) =>
@@ -99,7 +126,7 @@ $("dupe-close").addEventListener("click", async (e) => {
 });
 
 $("organise").addEventListener("click", () => {
-  const msg = { cmd: "organise", instructions: $("instructions").value };
+  const msg = { cmd: "organise", agent: $("agent").value, instructions: $("instructions").value };
   send(msg).catch(() => {}); // the outcome arrives through refresh(), even if this menu was closed
   showOrganise({ running: true });
 });
@@ -109,7 +136,10 @@ $("hi").addEventListener("click", sayHi);
 $("kit-hi").addEventListener("click", sayHi);
 const openHome = () => { browser.tabs.create({ url: browser.runtime.getURL("home.html") }); window.close(); };
 $("expand").addEventListener("click", openHome);
-$("setup").addEventListener("click", () => { browser.tabs.create({ url: browser.runtime.getURL("home.html#connect") }); window.close(); });
+$("setup").addEventListener("click", () => {
+  browser.tabs.create({ url: browser.runtime.getURL(aiConnected ? "home.html#assistants" : "home.html#connect") });
+  window.close();
+});
 $("expand-foot").addEventListener("click", openHome);
 $("options").addEventListener("click", () => { browser.runtime.openOptionsPage(); window.close(); });
 

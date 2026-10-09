@@ -32,6 +32,10 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 button.primary { background: var(--accent); color: var(--accent-fg); text-align: center; }
 button.primary:hover:not(:disabled) { background: var(--accent); filter: brightness(1.08); }
 button.link { width: auto; display: inline-block; color: var(--accent); padding: 4px 6px; }
+.agent-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.agent-row label { color: var(--muted); }
+select { flex: 1; min-width: 0; font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 5px 6px; }
+select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 textarea { display: block; width: 100%; font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line);
   border-radius: 6px; padding: 6px 8px; margin-bottom: 6px; resize: vertical; }
 textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }

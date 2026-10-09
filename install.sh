@@ -10,13 +10,12 @@
 # It needs python3 (already on most Linux and macOS systems) and changes only files in your home folder:
 #   - kit.py and a small launcher in Kit's folder (see APP_DIR below)
 #   - the native messaging registration for Kit, for Firefox and each Firefox-based browser found
-#   - Claude Code's MCP server list, if Claude Code is installed (`claude mcp add`)
+#   - the MCP server lists of the AI assistants it finds (Claude Code, Codex, Hermes Agent, Gemini CLI, Cursor, ...)
 set -eu
 
 REPO_RAW="https://raw.githubusercontent.com/samsamthecodingman/kit-tab-manager/master"
 EXTENSION_ID="tab-bridge@samroberts.local"
 HOST_NAME="tab_bridge"
-MCP_NAME="firefox-tabs"
 LISTING="https://addons.mozilla.org/firefox/addon/kit-tab-manager/"
 
 say() { printf '%s\n' "$*"; }
@@ -62,7 +61,6 @@ if [ "${1:-}" = "--uninstall" ]; then
   for_each_browser_dir remove_manifest
   if [ -f "$APP_DIR/kit.py" ]; then python3 "$APP_DIR/kit.py" unregister || true; fi
   rm -rf "$APP_DIR"
-  if command -v claude >/dev/null 2>&1; then claude mcp remove "$MCP_NAME" -s user >/dev/null 2>&1 || true; fi
   say "Done. Remove the Kit extension itself from your browser's Add-ons page (about:addons)."
   exit 0
 fi
@@ -108,13 +106,6 @@ EOF
 for_each_browser_dir write_manifest
 
 step "3/3  Connecting your AI assistants"
-if command -v claude >/dev/null 2>&1; then
-  claude mcp remove "$MCP_NAME" -s user >/dev/null 2>&1 || true # replaces any older Kit or Tab Bridge setup
-  claude mcp add --scope user "$MCP_NAME" -- "$PYTHON" "$APP_DIR/kit.py" mcp >/dev/null
-  say "Claude Code: connected. Start a new session to use Kit's tab tools."
-else
-  say "Claude Code: not installed. Kit's \"Organise with AI\" button uses it (https://claude.com/claude-code)."
-fi
 "$PYTHON" "$APP_DIR/kit.py" register "$PYTHON"
 say "Any other MCP-compatible assistant can use Kit too: point it at"
 say "    $PYTHON \"$APP_DIR/kit.py\" mcp"

@@ -110,6 +110,16 @@ button.big { font-size: 16px; padding: 12px 20px; border-radius: 12px; }
 .row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 12px; }
 
 .organise-card label { display: block; font-weight: 600; margin-bottom: 8px; }
+.organise-card select { display: block; width: min(100%, 320px); font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line);
+  border-radius: 10px; padding: 9px 12px; margin-bottom: 16px; }
+.organise-card select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.agent-card { display: flex; flex-direction: column; gap: 8px; }
+.agent-card h3 { font-size: 16px; }
+.agent-card .what { color: var(--muted); font-size: 13px; flex: 1; }
+.agent-card > button, .agent-card > a { align-self: flex-start; }
+.agent-card a.get { font-size: 14px; color: var(--accent-text); }
+.pill { align-self: flex-start; font: 600 12px/1 system-ui, sans-serif; padding: 5px 9px; border-radius: 999px; background: var(--surface-2); color: var(--muted); }
+.pill.on { background: var(--accent-soft); color: var(--accent-text); }
 textarea { display: block; width: 100%; font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line);
   border-radius: 10px; padding: 10px 12px; resize: vertical; }
 .result { margin-top: 14px; padding: 12px 14px; border-radius: 10px; background: var(--accent-soft); color: var(--fg); }

@@ -24,10 +24,14 @@
 
 <section>
   <h2>Organise with AI</h2>
+  <div class="agent-row">
+    <label for="agent">With</label>
+    <select id="agent" disabled><option value="">Checking assistants…</option></select>
+  </div>
   <textarea id="instructions" rows="2" maxlength="500" placeholder="Anything specific? (optional)" aria-label="Anything specific for the AI (optional)"></textarea>
   <button id="organise" class="primary">Organise my tabs</button>
-  <p id="organise-note" class="muted small">Uses Claude Code. It can group, move and rename, but can't close tabs.</p>
-  <p id="setup-note" class="small setup" hidden>Needs Claude Code connected to Kit. <button id="setup" class="link inline">Set up (one command)</button></p>
+  <p id="organise-note" class="muted small">It can group, move and rename, but can't close tabs.</p>
+  <p id="setup-note" class="small setup" hidden><span id="setup-text">Needs Kit's companion app.</span> <button id="setup" class="link inline">Set up (one command)</button></p>
 </section>
 
 <section>

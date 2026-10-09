@@ -58,7 +58,7 @@ function showOrganise(organise) {
     b.disabled = busy;
     b.textContent = busy ? "Organising…" : "Organise my tabs";
   }
-  $("organise-btn").disabled = busy || !aiConnected;
+  $("organise-btn").disabled = busy || !aiConnected || !$("agent").value;
   $("organise-note").textContent = busy
     ? "Organising your tabs. Kit narrates each change in the tab bar."
     : aiConnected ? "Takes 20–60 seconds. You can keep browsing while Kit works."
@@ -87,6 +87,8 @@ async function refreshStatus() {
   conn.className = connected ? "conn on" : "conn off";
   conn.querySelector(".label").textContent = connected ? "AI assistant connected" : "AI not connected";
   $("connect").hidden = connected;
+  $("assistants").hidden = !connected;
+  if (connected && !agentsLoaded) { agentsLoaded = true; loadAgents(false); }
   // While not connected, check every few seconds so the page updates by itself after setup.
   if (!connected && !connectPolling) connectPolling = setInterval(refreshStatus, 3000);
   if (connected && connectPolling) { clearInterval(connectPolling); connectPolling = null; }
@@ -99,10 +101,90 @@ function organise() {
     $("connect").scrollIntoView({ block: "start" });
     return;
   }
-  send({ cmd: "organise", instructions: $("instructions").value }).catch(() => {}); // outcome arrives via refreshStatus
+  if (!$("agent").value) {
+    $("organise").scrollIntoView({ block: "start" });
+    toast($("agent").options.length > 1 ? "Choose which assistant should organise first." : "Connect Claude Code, Codex or Hermes Agent first.", true);
+    return;
+  }
+  send({ cmd: "organise", agent: $("agent").value, instructions: $("instructions").value }).catch(() => {}); // outcome arrives via refreshStatus
   showOrganise({ running: true });
   $("organise").scrollIntoView({ block: "start" });
 }
+
+// ---- AI assistants -----------------------------------------------------------------------------
+
+const AGENT_SITES = {
+  claude: "https://claude.com/claude-code", codex: "https://github.com/openai/codex",
+  hermes: "https://hermes-agent.nousresearch.com", gemini: "https://github.com/google-gemini/gemini-cli",
+  cursor: "https://cursor.com", windsurf: "https://windsurf.com", "claude-desktop": "https://claude.ai/download",
+};
+let agentsLoaded = false;
+
+async function loadAgents(refresh) {
+  try {
+    showAgents(await send({ cmd: "agents", refresh }));
+  } catch (e) {
+    toast(String((e && e.message) || e), true);
+  }
+}
+
+function showAgents({ agents, chosen }) {
+  // Organise picker: connected assistants that can organise; no default beyond the last choice.
+  const usable = agents.filter((a) => a.connected && a.can_organise);
+  const option = (value, text) => Object.assign(document.createElement("option"), { value, textContent: text });
+  const pick = usable.some((a) => a.id === chosen) ? chosen : usable.length === 1 ? usable[0].id : "";
+  const options = usable.map((a) => option(a.id, a.name));
+  if (usable.length > 1 && !pick) options.unshift(option("", "Choose an assistant…"));
+  if (!usable.length) options.push(option("", "Connect Claude Code, Codex or Hermes Agent below"));
+  $("agent").replaceChildren(...options);
+  $("agent").value = pick;
+  $("agent").disabled = !usable.length;
+  $("organise-btn").disabled = !pick || wasBusy;
+
+  // Cards: every assistant Kit knows, with what it can do and how to connect it.
+  $("agent-cards").replaceChildren(...agents.map((a) => {
+    const card = Object.assign(document.createElement("article"), { className: "card agent-card" });
+    const pill = Object.assign(document.createElement("span"), {
+      className: a.connected ? "pill on" : "pill",
+      textContent: a.connected ? "Connected" : a.installed ? "Not connected" : "Not installed",
+    });
+    const what = Object.assign(document.createElement("p"), {
+      className: "what",
+      textContent: a.can_organise ? "Can see and manage your tabs, and run Organise with AI." : "Can see and manage your tabs.",
+    });
+    card.append(Object.assign(document.createElement("h3"), { textContent: a.name }), pill, what);
+    if (a.installed && !a.connected) {
+      const b = Object.assign(document.createElement("button"), { className: "primary", textContent: "Connect" });
+      b.addEventListener("click", async () => {
+        b.disabled = true;
+        b.textContent = "Connecting…";
+        try {
+          const reply = await send({ cmd: "connect_agent", id: a.id });
+          toast(`${a.name}: ${reply.message}`);
+          showAgents({ agents: reply.agents, chosen: $("agent").value || chosen });
+        } catch (e) {
+          toast(String((e && e.message) || e), true);
+          b.disabled = false;
+          b.textContent = "Connect";
+        }
+      });
+      card.append(b);
+    } else if (!a.installed && AGENT_SITES[a.id]) {
+      card.append(Object.assign(document.createElement("a"), { className: "get", href: AGENT_SITES[a.id], target: "_blank", rel: "noopener", textContent: `Get ${a.name} ↗` }));
+    }
+    return card;
+  }));
+}
+
+$("agent").addEventListener("change", (e) => {
+  $("organise-btn").disabled = !e.target.value || wasBusy;
+  if (e.target.value) send({ cmd: "choose_agent", id: e.target.value });
+});
+$("agents-refresh").addEventListener("click", async (e) => {
+  e.target.disabled = true;
+  await loadAgents(true);
+  e.target.disabled = false;
+});
 
 // ---- lists and rules --------------------------------------------------------------------------
 
@@ -289,4 +371,5 @@ $("version").textContent = `Version ${browser.runtime.getManifest().version}.`;
   }
   await Promise.all([renderSaved(), refreshStatus(), refreshOverview()]);
   if (location.hash === "#connect" && !aiConnected) $("connect").scrollIntoView({ block: "start" });
+  if (location.hash === "#assistants" && aiConnected) $("assistants").scrollIntoView({ block: "start" });
 })().catch((e) => toast(String((e && e.message) || e), true));

@@ -66,12 +66,25 @@
     </div>
   </section>
 
+  <section class="block" id="assistants" hidden>
+    <div class="block-head split">
+      <div>
+        <h2>AI assistants</h2>
+        <p>Connect the assistants you use, so they can see and manage your tabs. Claude Code, Codex and Hermes Agent can also run <strong>Organise with AI</strong>.</p>
+      </div>
+      <button id="agents-refresh" class="secondary">Check again</button>
+    </div>
+    <div class="grid" id="agent-cards"></div>
+  </section>
+
   <section class="block" id="organise">
     <div class="block-head">
       <h2>Organise with AI</h2>
-      <p>The AI looks at your tab titles and addresses and sorts them into sensible groups, keeping the groups you already have. It can group, move and rename, but never close a tab or read a page. This button uses Claude Code; more assistants to come.</p>
+      <p>The AI looks at your tab titles and addresses and sorts them into sensible groups, keeping the groups you already have. It can group, move and rename, but never close a tab or read a page.</p>
     </div>
     <div class="card organise-card">
+      <label for="agent">Organise with</label>
+      <select id="agent" disabled><option value="">Checking assistants…</option></select>
       <label for="instructions">Anything specific? <span class="muted">(optional)</span></label>
       <textarea id="instructions" rows="2" maxlength="500" placeholder="e.g. keep work and personal apart"></textarea>
       <div class="row">

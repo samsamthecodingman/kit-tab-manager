@@ -41,7 +41,7 @@ Let your AI assistant list, group, move, switch, close and read your tabs, or ti
 | | |
 |---|---|
 | 🗂️ **Tabs as tools for your AI** | Your AI assistant can list your tabs and groups, group and ungroup, rename and recolour groups, move and switch tabs, close tabs, and read a tab's text. |
-| ✨ **Organise with AI** | One button in your browser asks Claude Code to sort your tabs into sensible groups, without opening a chat. Add an optional instruction like "keep work and personal apart". |
+| ✨ **Organise with AI** | One button in your browser asks the assistant you pick (Claude Code, Codex or Hermes Agent) to sort your tabs into sensible groups, without opening a chat. Add an optional instruction like "keep work and personal apart". |
 | 📏 **Your own rules** | "Titles containing *recipe* go in **Cooking**", "github.com goes in **Code**". Apply them in one click, offline and free. Rules can be suggested from the groups you already have. |
 | 🧹 **One-click tidy-ups** | Group loose tabs by website, sort tabs within groups, collapse all groups, and close duplicate tabs (after showing you which). |
 | 📋 **Action lists** | Chain steps into a named button, like **Focus mode**: apply my rules, then collapse everything except Code. |
@@ -113,9 +113,13 @@ It installs Kit's companion app in your home folder (it needs `python3`, which m
 
 | AI assistant | Setup | Status |
 |---|---|---|
-| [Claude Code](https://claude.com/claude-code) | Connected automatically | Tested. Also powers **Organise with AI**. |
-| Codex, Gemini CLI, Hermes Agent, Cursor, Windsurf, Claude Desktop | Connected automatically if installed | Should work (they all speak MCP); not tested yet. In Hermes, type `/reload-mcp` or start a new session. |
+| [Claude Code](https://claude.com/claude-code) | Connected automatically | Tested, including **Organise with AI** |
+| [Codex](https://github.com/openai/codex) | Connected automatically | Can run **Organise with AI**; should work, not tested end to end yet |
+| [Hermes Agent](https://hermes-agent.nousresearch.com) | Connected automatically | Connection tested; can run **Organise with AI** (not tested end to end yet). Type `/reload-mcp` in an open session after connecting. |
+| Gemini CLI, Cursor, Windsurf, Claude Desktop | Connected automatically if installed | Tab tools should work (they all speak MCP); not tested yet |
 | VS Code and other MCP apps | Add by hand: run `python3 ~/.local/share/kit/kit.py mcp` (on macOS, `~/Library/Application Support/Kit/kit.py`) | Should work |
+
+You can also connect assistants later from Kit's full page (**AI assistants**), and pick which one runs **Organise with AI** in the menu or on the full page; Kit remembers your choice and has no default.
 
 The installer only edits an assistant's settings if that assistant is installed, keeps a one-time backup (`*.before-kit`) of each file it changes, and leaves alone any file it can't read safely.
 
@@ -157,8 +161,8 @@ To try the extension from the code, open `about:debugging` → **This Firefox** 
 - **Private windows are invisible** to Kit: their tabs are never listed or read.
 - **Page text is data, not instructions.** `read_tab` returns whatever a page says; the AI is told to treat it as untrusted.
 - **Closed tabs can be recovered.** They're logged to `~/.local/share/tab-bridge/closed.jsonl`, and Firefox's **History → Recently Closed Tabs** reopens them. Closing duplicates from the menu always shows you the list first.
-- **Organise with AI is fenced in.** It runs `claude -p` (Sonnet) in an empty folder, with no shell, file or web tools and only the grouping tools. It cannot close or read tabs, anything else is refused automatically, and it stops after 5 minutes. Runs are logged to `~/.local/share/tab-bridge/organise.log`.
-- **What leaves your machine:** only when you use an AI assistant (or **Organise with AI**) are tab titles and addresses, and any page text it asks to read, sent to that assistant's provider as part of your conversation: Anthropic for Claude Code and **Organise with AI**, OpenAI for Codex, Google for Gemini CLI, and so on. Rules, lists and one-click actions run entirely locally.
+- **Organise with AI is fenced in.** Whichever assistant you pick runs unattended in an empty folder with no shell, file or web tools, and talks to a version of Kit's MCP server that only has the grouping tools, so it can't close or read tabs. Claude Code runs with `--tools ""` and an allow-list; Codex with its shell switched off, a read-only sandbox and none of your other settings; Hermes limited to Kit's grouping toolset. Each run stops after 5 minutes. Runs are logged to `~/.local/share/tab-bridge/organise.log`.
+- **What leaves your machine:** only when you use an AI assistant (or **Organise with AI**) are tab titles and addresses, and any page text it asks to read, sent to that assistant's provider as part of your conversation: Anthropic for Claude Code, OpenAI for Codex, Google for Gemini CLI, whichever model provider you've set up in Hermes, and so on. **Organise with AI** sends to the provider of the assistant you picked. Rules, lists and one-click actions run entirely locally.
 
 ## Troubleshooting
 

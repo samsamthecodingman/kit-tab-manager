@@ -8,12 +8,12 @@ One file, Python standard library only, two jobs:
                     JSON) and listens on a Unix socket that only this user can open.
   kit.py mcp        Your AI assistant (Claude Code, or any MCP client) starts it as an MCP server
                     over stdio. Each tool call goes through the socket to the extension.
-  kit.py register   Connects Kit to the other MCP assistants it finds (install.sh runs this);
+  kit.py register   Connects Kit to every AI assistant it finds (install.sh runs this);
                     `kit.py unregister` disconnects them.
 
-The extension can also ask for "Organise with AI": Kit runs Claude Code headless
-(claude -p) in an empty folder with no built-in tools and only the tab grouping tools (no
-closing, no page reading), then reports back when it is done.
+The extension can also ask for "Organise with AI" with an assistant you pick (Claude Code, Codex or
+Hermes Agent): Kit runs it unattended in an empty folder, locked to the tab grouping tools (no shell,
+files, web, closing or page reading), then reports back when it is done.
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ import threading
 import time
 from pathlib import Path
 
-VERSION = "0.7.0"
+VERSION = "0.8.0"
 REQUEST_TIMEOUT = 60.0
 ORGANISE_TIMEOUT = 300.0
 ORGANISE_MODEL = "sonnet"
@@ -65,49 +65,40 @@ def find_program(name: str) -> str | None:
     return shutil.which(name, path=os.pathsep.join([os.environ.get("PATH", ""), *extra]))
 
 
-# ---- organise with AI (runs Claude Code) --------------------------------------------------------------------
+# ---- organise with AI -------------------------------------------------------------------------
+# The extension names an assistant; its entry in AGENTS (below) builds a locked-down command: no
+# shell, files or web, and an MCP server (`kit.py mcp --organise`) that only has ORGANISE_TOOLS.
 
-def organise_command(instructions: str) -> list[str]:
-    claude = find_program("claude")
-    if not claude:
-        raise RuntimeError("couldn't find the claude command. Is Claude Code installed?")
+def organise_prompt(instructions: str) -> str:
     extra = f"- The user added this request: {instructions.strip()}" if instructions.strip() else ""
-    config = {"mcpServers": {"firefox-tabs": {"command": sys.executable, "args": [str(SELF), "mcp"]}}}
-    return [
-        claude, "-p", ORGANISE_PROMPT.format(extra=extra),
-        "--model", ORGANISE_MODEL,
-        "--mcp-config", json.dumps(config), "--strict-mcp-config",
-        "--tools", "",  # no built-in tools: no shell, no files, no web
-        "--allowedTools", ",".join(f"mcp__firefox-tabs__{t}" for t in ORGANISE_TOOLS),
-        "--permission-mode", "dontAsk",  # anything not allowed above is refused, never prompted
-        "--output-format", "json",
-        "--no-session-persistence",
-    ]
+    return ORGANISE_PROMPT.format(extra=extra)
 
 
-def run_claude(instructions: str) -> tuple[bool, str]:
-    run_dir = DATA_DIR / "organise-run"  # empty working folder, so no project CLAUDE.md is loaded
+def run_organise(agent_id: str, instructions: str, prompt: str | None = None) -> tuple[bool, str]:
+    agent = AGENTS_BY_ID.get(agent_id)
+    run_dir = DATA_DIR / "organise-run"  # empty working folder, so no project instructions get loaded
     run_dir.mkdir(parents=True, exist_ok=True)
-    detail = ""
+    detail, name = "", agent["name"] if agent else agent_id
     try:
-        proc = subprocess.run(organise_command(instructions), cwd=run_dir, capture_output=True, text=True,
-                              timeout=ORGANISE_TIMEOUT, stdin=subprocess.DEVNULL)
+        if not agent or not agent.get("organise"):
+            raise RuntimeError(f"{name} can't organise tabs")
+        if not find_program(agent["program"]):
+            raise RuntimeError(f"couldn't find {name}. Is it installed?")
+        cmd, read_result = agent["organise"](find_program(agent["program"]), prompt or organise_prompt(instructions), run_dir)
+        proc = subprocess.run(cmd, cwd=run_dir, capture_output=True, text=True, timeout=ORGANISE_TIMEOUT, stdin=subprocess.DEVNULL)
     except subprocess.TimeoutExpired:
-        ok, summary = False, "Claude took too long, so I stopped it."
+        ok, summary = False, f"{name} took too long, so I stopped it."
     except (OSError, RuntimeError) as exc:
-        ok, summary = False, f"Couldn't start Claude: {exc}"
+        ok, summary = False, f"Couldn't start {name}: {exc}"
     else:
         detail = proc.stderr[-2000:]
-        try:
-            out = json.loads(proc.stdout)
-            ok = proc.returncode == 0 and not out.get("is_error")
-            summary = str(out.get("result") or "").strip() or "Claude finished without a summary."
-        except ValueError:
-            ok, summary = False, f"Claude stopped with exit code {proc.returncode}."
+        ok, summary = read_result(proc, run_dir)
+        if not ok:
             detail = (proc.stdout[-1000:] + "\n" + detail).strip()
+        summary = summary or (f"{name} finished without a summary." if ok else f"{name} stopped with exit code {proc.returncode}.")
     with (DATA_DIR / "organise.log").open("a") as log:
-        log.write(json.dumps({"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), "ok": ok, "instructions": instructions,
-                              "summary": summary, "detail": detail}) + "\n")
+        log.write(json.dumps({"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), "agent": agent_id, "ok": ok,
+                              "instructions": instructions, "summary": summary, "detail": detail}) + "\n")
     return ok, summary[:1500]
 
 
@@ -144,6 +135,9 @@ class Bridge:
                 if msg.get("type") == "organise":
                     threading.Thread(target=self.organise, args=(msg,), daemon=True).start()
                     continue
+                if msg.get("type") in ("agents", "connect_agent"):
+                    threading.Thread(target=self.agents, args=(msg,), daemon=True).start()
+                    continue
                 with self._pending_lock:
                     waiter = self._pending.pop(msg.get("id"), None)
                 if waiter is not None:
@@ -179,11 +173,21 @@ class Bridge:
                                "summary": "Kit is already organising your tabs."})
             return
         try:
-            ok, summary = run_claude(str(msg.get("instructions") or "")[:500])
+            ok, summary = run_organise(str(msg.get("agent") or ""), str(msg.get("instructions") or "")[:500])
         finally:
             self._organising.release()
         if not self.closed.is_set():
             self._send_native({"event": "organise_done", "run_id": run_id, "ok": ok, "summary": summary})
+
+    def agents(self, msg: dict) -> None:
+        """Lists the assistants (and connects one first, for "connect_agent")."""
+        result = None
+        if msg.get("type") == "connect_agent":
+            agent = AGENTS_BY_ID.get(str(msg.get("id")))
+            ok, message = connect_agent(agent, sys.executable) if agent else (False, "unknown assistant")
+            result = {"id": msg.get("id"), "ok": ok, "message": message}
+        if not self.closed.is_set():
+            self._send_native({"event": "agents", "req": msg.get("req"), "agents": agents_status(), "result": result})
 
     # The MCP server (kit.py mcp) sends one JSON request per line over the socket.
     def serve_client(self, conn: socket.socket) -> None:
@@ -302,6 +306,7 @@ TOOLS = [
 ]
 HANDLERS = {t["name"]: (lambda name: lambda args: bridge_call(name, args))(t["name"]) for t in TOOLS}
 HANDLERS["close_tabs"] = close_tabs
+ALLOWED_TOOLS = {t["name"] for t in TOOLS}  # `kit.py mcp --organise` narrows this to ORGANISE_TOOLS
 
 
 def mcp_handle(msg: dict) -> dict | None:
@@ -318,9 +323,9 @@ def mcp_handle(msg: dict) -> dict | None:
     elif method == "ping":
         result = {}
     elif method == "tools/list":
-        result = {"tools": TOOLS}
+        result = {"tools": [t for t in TOOLS if t["name"] in ALLOWED_TOOLS]}
     elif method == "tools/call":
-        handler = HANDLERS.get(params.get("name"))
+        handler = HANDLERS.get(params.get("name")) if params.get("name") in ALLOWED_TOOLS else None
         if handler is None:
             return {"jsonrpc": "2.0", "id": rid, "error": {"code": -32602, "message": f"unknown tool {params.get('name')}"}}
         try:
@@ -349,22 +354,21 @@ def run_mcp() -> None:
             sys.stdout.flush()
 
 
-# ---- connecting AI assistants (used by install.sh) ---------------------------------------------
+# ---- AI assistants ------------------------------------------------------------------------------
+# Each entry knows how to tell whether the assistant is installed and connected, how to connect and
+# disconnect Kit, and (only where it can be locked down to Kit's grouping tools) how to organise.
 
 MCP_NAME = "firefox-tabs"
+ORGANISE_MCP_NAME = "kit-organise"  # Hermes only: a server with just the grouping tools, for -t
 
 
-def assistant_configs() -> list[tuple[str, Path, Path]]:
-    """(assistant, folder that shows it's installed, its MCP config file). All use an "mcpServers" object."""
-    home = Path.home()
-    support = home / "Library" / "Application Support"
-    return [
-        ("Cursor", home / ".cursor", home / ".cursor" / "mcp.json"),
-        ("Gemini CLI", home / ".gemini", home / ".gemini" / "settings.json"),
-        ("Windsurf", home / ".codeium" / "windsurf", home / ".codeium" / "windsurf" / "mcp_config.json"),
-        ("Claude Desktop", support / "Claude", support / "Claude" / "claude_desktop_config.json"),
-        ("Claude Desktop", home / ".config" / "Claude", home / ".config" / "Claude" / "claude_desktop_config.json"),
-    ]
+def run_cli(args: list[str], answers: str = "") -> subprocess.CompletedProcess:
+    # Some assistants ask to confirm (Hermes: "Enable all tools?", "Remove?"), so answers says yes.
+    return subprocess.run(args, input=answers, capture_output=True, text=True, timeout=120)
+
+
+def mcp_entry(python: str, organise: bool = False) -> list[str]:
+    return [python, str(SELF), "mcp", *(["--organise"] if organise else [])]
 
 
 def update_config(path: Path, entry: dict | None) -> str:
@@ -392,44 +396,176 @@ def update_config(path: Path, entry: dict | None) -> str:
     return "removed" if entry is None else "connected"
 
 
-def register_assistants(python: str, remove: bool = False) -> None:
-    """Connects (or disconnects) Kit's MCP server to each MCP assistant found, except Claude Code,
-    which install.sh handles with `claude mcp add`."""
-    entry = None if remove else {"command": python, "args": [str(SELF), "mcp"]}
-    found = False
-    for name, marker, config in assistant_configs():
-        if marker.is_dir():
-            found = True
-            print(f"{name}: {update_config(config, entry)} ({config})")
-    # Assistants with their own command for this, so their config files are never edited by hand.
-    clis = [
-        ("Codex", "codex", [MCP_NAME, "--", python, str(SELF), "mcp"], ""),
-        ("Hermes Agent", "hermes", [MCP_NAME, "--command", python, "--args", str(SELF), "mcp"],
-         " (type /reload-mcp in an open Hermes session)"),
+def json_config_connected(path: Path) -> bool:
+    try:
+        return MCP_NAME in (json.loads(path.read_text()).get("mcpServers") or {})
+    except (OSError, ValueError, AttributeError):
+        return False
+
+
+# Organise commands: each returns (command, read_result), where read_result(proc, run_dir) -> (ok, summary).
+
+def claude_organise(claude: str, prompt: str, run_dir: Path):
+    config = {"mcpServers": {MCP_NAME: {"command": sys.executable, "args": mcp_entry(sys.executable, True)[1:]}}}
+    cmd = [
+        claude, "-p", prompt, "--model", ORGANISE_MODEL,
+        "--mcp-config", json.dumps(config), "--strict-mcp-config",
+        "--tools", "",  # no built-in tools: no shell, no files, no web
+        "--allowedTools", ",".join(f"mcp__{MCP_NAME}__{t}" for t in ORGANISE_TOOLS),
+        "--permission-mode", "dontAsk",  # anything not allowed above is refused, never prompted
+        "--output-format", "json", "--no-session-persistence",
     ]
-    for name, program, add_args, note in clis:
-        path = find_program(program)
-        if not path:
-            continue
-        found = True
-        subprocess.run([path, "mcp", "remove", MCP_NAME], input="y\n", capture_output=True, text=True)  # Hermes confirms removals
-        if remove:
-            gone = MCP_NAME not in subprocess.run([path, "mcp", "list"], capture_output=True, text=True).stdout
-            print(f"{name}: " + ("removed" if gone else "couldn't remove; remove Kit by hand"))
-        else:
-            # Hermes asks to confirm enabling the tools (and, if its test connection fails, whether to
-            # save anyway), so answer yes; then check the server really is in the assistant's list.
-            done = subprocess.run([path, "mcp", "add", *add_args], input="y\ny\n", capture_output=True, text=True)
-            listed = subprocess.run([path, "mcp", "list"], capture_output=True, text=True)
-            ok = done.returncode == 0 and MCP_NAME in listed.stdout
-            print(f"{name}: " + (f"connected{note}" if ok else "couldn't connect; add Kit by hand"))
+
+    def read(proc, _run_dir):
+        try:
+            out = json.loads(proc.stdout)
+        except ValueError:
+            return False, ""
+        return proc.returncode == 0 and not out.get("is_error"), str(out.get("result") or "").strip()
+    return cmd, read
+
+
+def codex_organise(codex: str, prompt: str, run_dir: Path):
+    toml = json.dumps  # TOML basic strings and arrays of them read like JSON
+    cmd = [
+        codex, "exec", "--ignore-user-config",  # only Kit's MCP server below, none of the user's
+        "--sandbox", "read-only", "--disable", "shell_tool",  # no shell at all (and read-only if it had one)
+        "--disable", "browser_use", "--disable", "browser_use_external", "--disable", "computer_use", "--disable", "apps",
+        "-c", 'web_search="disabled"', "-c", 'approval_policy="never"',
+        "-c", f"mcp_servers.{MCP_NAME}.command={toml(sys.executable)}",
+        "-c", f"mcp_servers.{MCP_NAME}.args={toml(mcp_entry(sys.executable, True)[1:])}",
+        "--ephemeral", "--skip-git-repo-check", "--color", "never",
+        "-o", str(run_dir / "codex-summary.txt"), prompt,
+    ]
+
+    def read(proc, run_dir):
+        summary = run_dir / "codex-summary.txt"
+        text = summary.read_text().strip() if summary.exists() else ""
+        summary.unlink(missing_ok=True)
+        return proc.returncode == 0 and bool(text), text
+    return cmd, read
+
+
+def hermes_organise(hermes: str, prompt: str, run_dir: Path):
+    # -z runs one prompt unattended; -t limits it to the kit-organise server's tools: no terminal, files or web.
+    cmd = [hermes, "-z", prompt, "-t", f"mcp-{ORGANISE_MCP_NAME}", "--ignore-rules"]
+    return cmd, lambda proc, _run_dir: (proc.returncode == 0 and bool(proc.stdout.strip()), proc.stdout.strip())
+
+
+def cli_connected(program: str, *names: str) -> bool:
+    path = find_program(program)
+    if not path:
+        return False
+    try:
+        listed = run_cli([path, "mcp", "list"]).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return all(n in listed for n in names)
+
+
+def cli_connect(program: str, adds: list[tuple[str, list[str]]], remove: bool) -> tuple[bool, str]:
+    path = find_program(program)
+    for name, add_args in adds:
+        run_cli([path, "mcp", "remove", name], "y\n")
+        if not remove:
+            run_cli([path, "mcp", "add", name, *add_args], "y\ny\n")
+    ok = cli_connected(program, *[n for n, _ in adds]) != remove
+    return ok, ("removed" if remove else "connected") if ok else ("couldn't remove; remove Kit by hand" if remove else "couldn't connect; add Kit by hand")
+
+
+def claude_connect(python: str, remove: bool) -> tuple[bool, str]:
+    claude = find_program("claude")
+    run_cli([claude, "mcp", "remove", MCP_NAME, "-s", "user"])  # also replaces older Kit or Tab Bridge setups
+    if not remove:
+        run_cli([claude, "mcp", "add", "--scope", "user", MCP_NAME, "--", *mcp_entry(python)])
+    ok = claude_connected() != remove
+    return ok, ("removed" if remove else "connected") if ok else "couldn't update Claude Code; try `claude mcp add` by hand"
+
+
+def claude_connected() -> bool:
+    claude = find_program("claude")
+    try:
+        return bool(claude) and run_cli([claude, "mcp", "get", MCP_NAME]).returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
+def json_agent(agent_id: str, name: str, marker: Path, config: Path) -> dict:
+    return {
+        "id": agent_id, "name": name,
+        "installed": marker.is_dir,
+        "connected": lambda: json_config_connected(config),
+        "connect": lambda python, remove: (lambda r: (not r.startswith("skipped"), f"{r} ({config})"))(
+            update_config(config, None if remove else {"command": python, "args": mcp_entry(python)[1:]})),
+    }
+
+
+def build_agents() -> list[dict]:
+    home, support = Path.home(), Path.home() / "Library" / "Application Support"
+    desktop = support / "Claude" if sys.platform == "darwin" else home / ".config" / "Claude"
+    return [
+        {"id": "claude", "name": "Claude Code", "program": "claude", "organise": claude_organise,
+         "installed": lambda: bool(find_program("claude")), "connected": claude_connected, "connect": claude_connect},
+        {"id": "codex", "name": "Codex", "program": "codex", "organise": codex_organise,
+         "installed": lambda: bool(find_program("codex")), "connected": lambda: cli_connected("codex", MCP_NAME),
+         "connect": lambda python, remove: cli_connect("codex", [(MCP_NAME, ["--", *mcp_entry(python)])], remove)},
+        {"id": "hermes", "name": "Hermes Agent", "program": "hermes", "organise": hermes_organise,
+         "installed": lambda: bool(find_program("hermes")),
+         "connected": lambda: cli_connected("hermes", MCP_NAME, ORGANISE_MCP_NAME),
+         "connect": lambda python, remove: cli_connect("hermes", [
+             (MCP_NAME, ["--command", python, "--args", *mcp_entry(python)[1:]]),
+             (ORGANISE_MCP_NAME, ["--command", python, "--args", *mcp_entry(python, True)[1:]])], remove),
+         "note": "type /reload-mcp in an open Hermes session"},
+        json_agent("gemini", "Gemini CLI", home / ".gemini", home / ".gemini" / "settings.json"),
+        json_agent("cursor", "Cursor", home / ".cursor", home / ".cursor" / "mcp.json"),
+        json_agent("windsurf", "Windsurf", home / ".codeium" / "windsurf", home / ".codeium" / "windsurf" / "mcp_config.json"),
+        json_agent("claude-desktop", "Claude Desktop", desktop, desktop / "claude_desktop_config.json"),
+    ]
+
+
+AGENTS = build_agents()
+AGENTS_BY_ID = {a["id"]: a for a in AGENTS}
+
+
+def connect_agent(agent: dict, python: str, remove: bool = False) -> tuple[bool, str]:
+    if not agent["installed"]():
+        return False, f"{agent['name']} isn't installed"
+    try:
+        ok, message = agent["connect"](python, remove)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return False, f"couldn't update {agent['name']}: {exc}"
+    if ok and not remove and agent.get("note"):
+        message += f" ({agent['note']})"
+    return ok, message
+
+
+def agents_status() -> list[dict]:
+    """What the extension shows: every assistant Kit knows, whether it's installed and connected,
+    and whether it can run "Organise with AI"."""
+    out = []
+    for a in AGENTS:
+        installed = a["installed"]()
+        out.append({"id": a["id"], "name": a["name"], "installed": installed,
+                    "connected": installed and a["connected"](), "can_organise": bool(a.get("organise"))})
+    return out
+
+
+def register_assistants(python: str, remove: bool = False) -> None:
+    """install.sh: connects (or disconnects) every installed assistant."""
+    found = False
+    for agent in AGENTS:
+        if agent["installed"]():
+            found = True
+            print(f"{agent['name']}: {connect_agent(agent, python, remove)[1]}")
     if not found and not remove:
-        print("No other MCP assistants found (Cursor, Gemini CLI, Codex, Hermes Agent, Windsurf, Claude Desktop).")
+        print("No AI assistants found (Claude Code, Codex, Hermes Agent, Gemini CLI, Cursor, Windsurf, Claude Desktop).")
 
 
 def main() -> None:
     mode = sys.argv[1] if len(sys.argv) > 1 else ""
     if mode == "mcp":
+        if "--organise" in sys.argv[2:]:
+            ALLOWED_TOOLS.intersection_update(ORGANISE_TOOLS)
         run_mcp()
     elif mode in ("register", "unregister"):
         register_assistants(sys.argv[2] if len(sys.argv) > 2 else sys.executable, remove=mode == "unregister")

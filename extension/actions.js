@@ -164,13 +164,47 @@ const ACTION_LABELS = {
   close_duplicates: "Closing duplicates",
 };
 
-// "Organise with AI": the native host runs Claude Code headless with only the grouping
-// tools; its changes come back through the bridge, so Kit narrates them as they happen.
+// "Organise with AI": the companion app runs the assistant you picked (Claude Code, Codex or
+// Hermes Agent) unattended, locked to the grouping tools; its changes come back through the bridge,
+// so Kit narrates them as they happen. There's no default assistant: the choice is remembered.
 const Organiser = { running: null, last: null };
 
-async function organiseWithClaude(instructions = "") {
+// AI assistants, as the companion app reports them: [{id, name, installed, connected, can_organise}].
+const Agents = { list: null, at: 0, pending: new Map(), next: 1 };
+
+function askHost(type, extra = {}, timeoutMs = 150000) {
+  if (!bridgeReady) return Promise.resolve(null);
+  const req = Agents.next++;
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => { Agents.pending.delete(req); reject(new Error("Kit's companion app didn't answer")); }, timeoutMs);
+    Agents.pending.set(req, (msg) => { clearTimeout(timer); resolve(msg); });
+    port.postMessage({ type, req, ...extra });
+  });
+}
+
+async function agentList(refresh = false) {
+  if (!bridgeReady) return [];
+  if (refresh || !Agents.list || Date.now() - Agents.at > 60000) {
+    const msg = await askHost("agents");
+    if (msg) { Agents.list = msg.agents; Agents.at = Date.now(); }
+  }
+  return Agents.list || [];
+}
+
+async function chosenAgent(requested) {
+  const usable = (await agentList()).filter((a) => a.connected && a.can_organise);
+  const saved = requested || (await browser.storage.local.get("organiseAgent")).organiseAgent;
+  if (saved && usable.some((a) => a.id === saved)) return saved;
+  if (usable.length === 1) return usable[0].id;
+  if (!usable.length) throw new Error("Connect Claude Code, Codex or Hermes Agent to use Organise with AI: see Kit's full page.");
+  throw new Error("Choose which assistant should organise your tabs.");
+}
+
+async function organiseWithClaude(instructions = "", requestedAgent = "") {
   if (Organiser.running) return Organiser.running.promise;
-  if (!bridgeReady) throw new Error("Connect Claude Code first: open Kit's full page for the one-line setup.");
+  if (!bridgeReady) throw new Error("Connect an AI assistant first: open Kit's full page for the one-line setup.");
+  const agent = await chosenAgent(requestedAgent);
+  await browser.storage.local.set({ organiseAgent: agent });
   const windowId = await focusedWindowId();
   const run = { run_id: Date.now() };
   run.promise = new Promise((resolve) => (run.resolve = resolve)).then((r) => {
@@ -182,11 +216,17 @@ async function organiseWithClaude(instructions = "") {
   });
   Organiser.running = run;
   Mascot.begin(windowId, "Thinking about your tabs…");
-  port.postMessage({ type: "organise", run_id: run.run_id, instructions: String(instructions).slice(0, 500) });
+  port.postMessage({ type: "organise", run_id: run.run_id, agent, instructions: String(instructions).slice(0, 500) });
   return run.promise;
 }
 
 function onHostEvent(msg) {
+  if (msg.event === "agents") {
+    const done = Agents.pending.get(msg.req);
+    Agents.pending.delete(msg.req);
+    if (done) done(msg);
+    return;
+  }
   const run = Organiser.running;
   if (!run) return;
   if (msg.event === "organise_done" && msg.run_id === run.run_id) run.resolve(msg);
@@ -274,7 +314,23 @@ browser.runtime.onMessage.addListener(async (msg) => {
         organise: { running: !!Organiser.running, last: Organiser.last },
       };
     case "organise":
-      return organiseWithClaude(msg.instructions || "");
+      return organiseWithClaude(msg.instructions || "", msg.agent || "");
+    case "agents": {
+      const list = await agentList(!!msg.refresh);
+      const { organiseAgent } = await browser.storage.local.get("organiseAgent");
+      return { agents: list, chosen: organiseAgent || null };
+    }
+    case "choose_agent":
+      await browser.storage.local.set({ organiseAgent: msg.id });
+      return true;
+    case "connect_agent": {
+      const reply = await askHost("connect_agent", { id: msg.id });
+      if (!reply) throw new Error("Kit's companion app isn't running.");
+      Agents.list = reply.agents;
+      Agents.at = Date.now();
+      if (!reply.result.ok) throw new Error(reply.result.message);
+      return { agents: reply.agents, message: reply.result.message };
+    }
     case "hi": {
       const [tab] = await browser.tabs.query({ active: true, windowId });
       if (tab) Mascot.demo(tab);

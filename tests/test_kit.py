@@ -160,3 +160,32 @@ def test_connecting_other_assistants_edits_configs_safely(tmp_path):
     commented.write_text('{ // my settings\n "mcpServers": {} }')
     assert kit.update_config(commented, entry).startswith("skipped")
     assert commented.read_text() == '{ // my settings\n "mcpServers": {} }'
+
+
+def test_mcp_organise_mode_only_has_grouping_tools():
+    with tempfile.TemporaryDirectory() as run:
+        env = {**os.environ, "XDG_RUNTIME_DIR": run}
+        lines = "".join(json.dumps(m) + "\n" for m in [
+            {"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
+            {"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "close_tabs", "arguments": {"tab_ids": [1]}}},
+        ])
+        out = subprocess.run([sys.executable, str(KIT), "mcp", "--organise"], input=lines, capture_output=True, text=True, env=env, timeout=20)
+    listed, refused = [json.loads(line) for line in out.stdout.splitlines()]
+    assert [t["name"] for t in listed["result"]["tools"]] == ["list_tabs", "list_groups", "group_tabs", "ungroup_tabs", "update_group", "move_tabs"]
+    assert refused["error"]["code"] == -32602  # close_tabs doesn't exist in organise mode
+
+
+def test_agents_status_in_an_empty_home(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("PATH", str(tmp_path / "bin"))  # no assistants on PATH
+    kit = load_kit()
+    monkeypatch.setattr(kit, "find_program", lambda name: None)
+    (tmp_path / ".cursor").mkdir()
+    status = {a["id"]: a for a in kit.agents_status()}
+    assert set(status) == {"claude", "codex", "hermes", "gemini", "cursor", "windsurf", "claude-desktop"}
+    assert status["cursor"]["installed"] and not status["cursor"]["connected"]
+    assert not status["claude"]["installed"]
+    assert {i for i, a in status.items() if a["can_organise"]} == {"claude", "codex", "hermes"}
+    ok, message = kit.connect_agent(kit.AGENTS_BY_ID["cursor"], "/usr/bin/python3")
+    assert ok and message.startswith("connected")
+    assert {a["id"]: a for a in kit.agents_status()}["cursor"]["connected"]
