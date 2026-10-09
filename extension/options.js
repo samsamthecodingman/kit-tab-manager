@@ -73,7 +73,11 @@ function renderLists() {
       const argInput = input(step.arg, arg || "", (v) => { step.arg = v; changed(); }, arg || "Step detail");
       argInput.hidden = !arg;
       return el("div", { className: "step" }, [
-        select(options, step.type, (v) => { step.type = v; changed(true); }, "Step"),
+        select(options, step.type, (v) => {
+          step.type = v;
+          if (!(stepTypes[v] && stepTypes[v].arg)) step.arg = ""; // a leftover detail would change what the new step does
+          changed(true);
+        }, "Step"),
         argInput,
         iconButton("✕", "Delete step", () => { list.steps.splice(si, 1); changed(true); }),
       ]);
@@ -119,3 +123,8 @@ $("suggest").addEventListener("click", async () => {
 })();
 
 $("nav-home").addEventListener("click", () => browser.tabs.create({ url: browser.runtime.getURL("home.html") }));
+
+// Saves wait a moment after typing; closing the tab saves straight away.
+addEventListener("pagehide", () => {
+  if (saveTimer) browser.storage.local.set({ rules, lists });
+});

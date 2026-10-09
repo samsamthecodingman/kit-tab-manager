@@ -395,8 +395,11 @@ const Mascot = {
   },
 
   async finish() {
+    const token = this.endToken;
     await TabBarKit.leave();
-    if (this.busy > 0) return; // something new started while Kit was walking off
+    // Something new started while Kit was walking off (and may already have finished: then its
+    // own end() walks Kit off again).
+    if (this.busy > 0 || this.endToken !== token) return;
     this.restoreTheme();
     this.animateIcon(false);
     this.windowId = null;

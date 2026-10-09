@@ -98,7 +98,7 @@ async function init() {
   $("lists").replaceChildren(...lists.map((name, index) => {
     const b = document.createElement("button");
     b.textContent = name;
-    b.addEventListener("click", () => run(b, { cmd: "run_list", index }));
+    b.addEventListener("click", () => run(b, { cmd: "run_list", index, name }));
     return b;
   }));
   $("no-lists").hidden = lists.length > 0;
@@ -134,7 +134,16 @@ $("dupe-close").addEventListener("click", async (e) => {
 
 $("organise").addEventListener("click", () => {
   const msg = { cmd: "organise", agent: $("agent").value, instructions: $("instructions").value };
-  send(msg).catch(() => {}); // the outcome arrives through refresh(), even if this menu was closed
+  const clicked = Date.now();
+  // The outcome arrives through refresh(), even if this menu was closed. An error with no newer
+  // result means the run never started (say, no assistant picked), so show it here.
+  send(msg).catch(async (e) => {
+    const { organise } = await send({ cmd: "status" });
+    if (!organise.running && !(organise.last && organise.last.at >= clicked)) {
+      showOrganise(organise);
+      status(String((e && e.message) || e), "bad");
+    }
+  });
   showOrganise({ running: true });
 });
 

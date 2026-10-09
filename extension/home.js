@@ -100,7 +100,15 @@ function organise() {
     toast($("agent").options.length > 1 ? "Choose which assistant should organise first." : "Connect Claude Code, Codex or Hermes Agent first.", true);
     return;
   }
-  send({ cmd: "organise", agent: $("agent").value, instructions: $("instructions").value }).catch(() => {}); // outcome arrives via refreshStatus
+  const clicked = Date.now();
+  // The outcome arrives via refreshStatus; an error with no newer result means the run never started.
+  send({ cmd: "organise", agent: $("agent").value, instructions: $("instructions").value }).catch(async (e) => {
+    const { organise } = await send({ cmd: "status" });
+    if (!organise.running && !(organise.last && organise.last.at >= clicked)) {
+      showOrganise(organise);
+      toast(String((e && e.message) || e), true);
+    }
+  });
   showOrganise({ running: true });
   $("organise").scrollIntoView({ block: "start" });
 }
@@ -203,7 +211,7 @@ async function renderSaved() {
     const ol = document.createElement("ol");
     for (const step of list.steps || []) ol.append(Object.assign(document.createElement("li"), { textContent: stepText(step) }));
     const b = Object.assign(document.createElement("button"), { textContent: "Run" });
-    b.addEventListener("click", () => run(b, { cmd: "run_list", index }));
+    b.addEventListener("click", () => run(b, { cmd: "run_list", index, name: list.name }));
     card.append(h, ol, b);
     return card;
   }));

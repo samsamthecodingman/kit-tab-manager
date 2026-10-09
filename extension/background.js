@@ -16,6 +16,8 @@ function setConnected(ready) {
 function connect() {
   port = browser.runtime.connectNative(HOST);
   port.postMessage({ type: "ping" }); // the app answers "pong"; if it isn't installed, the port just disconnects
+  const own = port; // replies go back on the port the request came in on, even if it has since dropped
+  const reply = (m) => { try { own.postMessage(m); } catch (e) { /* the companion app went away */ } };
   port.onMessage.addListener(async (msg) => {
     if (msg && msg.event === "pong") return setConnected(true);
     if (msg && msg.event) return onHostEvent(msg); // e.g. "Organise with AI" finished
@@ -26,10 +28,10 @@ function connect() {
     let ok = false;
     try {
       if (!handler) throw new Error(`unknown method ${method}`);
-      port.postMessage({ id, result: await handler(params || {}) });
+      reply({ id, result: await handler(params || {}) });
       ok = true;
     } catch (e) {
-      port.postMessage({ id, error: String((e && e.message) || e) });
+      reply({ id, error: String((e && e.message) || e) });
     } finally {
       if (animated) Mascot.end(ok);
     }
@@ -62,6 +64,25 @@ function ids(list, name = "tab_ids") {
     throw new Error(`${name} must be a non-empty list of tab ids`);
   }
   return list;
+}
+
+// Private windows are off limits: every request that names tabs, groups or windows checks first.
+async function publicTabs(list) {
+  const tabs = await Promise.all(ids(list).map((id) => browser.tabs.get(id)));
+  if (tabs.some((t) => t.incognito)) throw new Error("tabs in private windows are off limits");
+  return tabs;
+}
+
+async function publicWindow(windowId) {
+  if ((await browser.windows.get(windowId)).incognito) throw new Error("private windows are off limits");
+}
+
+async function publicGroup(groupId) {
+  await publicWindow((await browser.tabGroups.get(groupId)).windowId);
+}
+
+async function publicWindowIds() {
+  return new Set((await browser.windows.getAll()).filter((w) => !w.incognito).map((w) => w.id));
 }
 
 function checkColor(color) {
@@ -106,20 +127,24 @@ const HANDLERS = {
   async list_tabs() {
     const [tabs, wins] = await Promise.all([browser.tabs.query({}), browser.windows.getAll()]);
     return {
-      windows: wins.map((w) => ({ id: w.id, focused: w.focused, incognito: w.incognito })),
+      windows: wins.filter((w) => !w.incognito).map((w) => ({ id: w.id, focused: w.focused })),
       tabs: tabs.filter((t) => !t.incognito).map(tabSummary),
     };
   },
 
   async list_groups() {
-    const groups = await browser.tabGroups.query({});
-    return groups.map((g) => ({ id: g.id, title: g.title, color: g.color, collapsed: g.collapsed, window_id: g.windowId }));
+    const [groups, open] = await Promise.all([browser.tabGroups.query({}), publicWindowIds()]);
+    return groups.filter((g) => open.has(g.windowId)).map((g) => ({ id: g.id, title: g.title, color: g.color, collapsed: g.collapsed, window_id: g.windowId }));
   },
 
   async group_tabs({ tab_ids, group_id, title, color }) {
     checkColor(color);
-    const opts = { tabIds: ids(tab_ids) };
-    if (group_id !== undefined && group_id !== null) opts.groupId = group_id;
+    await publicTabs(tab_ids);
+    const opts = { tabIds: tab_ids };
+    if (group_id !== undefined && group_id !== null) {
+      await publicGroup(group_id);
+      opts.groupId = group_id;
+    }
     const gid = await browser.tabs.group(opts);
     const update = {};
     if (title !== undefined && title !== null) update.title = String(title);
@@ -129,12 +154,14 @@ const HANDLERS = {
   },
 
   async ungroup_tabs({ tab_ids }) {
-    await browser.tabs.ungroup(ids(tab_ids));
+    await publicTabs(tab_ids);
+    await browser.tabs.ungroup(tab_ids);
     return { ok: true };
   },
 
   async update_group({ group_id, title, color, collapsed }) {
     checkColor(color);
+    await publicGroup(group_id);
     const update = {};
     if (title !== undefined && title !== null) update.title = String(title);
     if (color) update.color = color;
@@ -145,21 +172,29 @@ const HANDLERS = {
 
   async move_tabs({ tab_ids, index, window_id }) {
     const opts = { index: Number.isInteger(index) ? index : -1 };
-    if (Number.isInteger(window_id)) opts.windowId = window_id;
-    const moved = await browser.tabs.move(ids(tab_ids), opts);
+    await publicTabs(tab_ids);
+    if (Number.isInteger(window_id)) {
+      await publicWindow(window_id);
+      opts.windowId = window_id;
+    }
+    const moved = await browser.tabs.move(tab_ids, opts);
     return (Array.isArray(moved) ? moved : [moved]).map(tabSummary);
   },
 
   async activate_tab({ tab_id }) {
+    await publicTabs([tab_id]);
     const t = await browser.tabs.update(tab_id, { active: true });
     await browser.windows.update(t.windowId, { focused: true });
     return tabSummary(t);
   },
 
   async close_tabs({ tab_ids }) {
-    const list = ids(tab_ids);
-    const tabs = await Promise.all(list.map((id) => browser.tabs.get(id)));
-    await browser.tabs.remove(list);
+    // Tabs that are already gone are skipped rather than failing the whole request.
+    const found = await Promise.allSettled(ids(tab_ids).map((id) => browser.tabs.get(id)));
+    const tabs = found.filter((r) => r.status === "fulfilled").map((r) => r.value);
+    if (tabs.some((t) => t.incognito)) throw new Error("tabs in private windows are off limits");
+    if (!tabs.length) throw new Error("none of those tabs are open");
+    await browser.tabs.remove(tabs.map((t) => t.id));
     return { closed: tabs.map((t) => ({ title: t.title, url: t.url })) };
   },
 

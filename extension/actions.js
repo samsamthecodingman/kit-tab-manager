@@ -23,8 +23,14 @@ function hostOf(url) {
   try { return new URL(url).hostname.replace(/^www\./, ""); } catch (e) { return ""; }
 }
 
+// "Website is" rules accept what people paste: https://www.github.com/ means github.com.
+function siteOf(text) {
+  return text.replace(/^[a-z][a-z0-9+.-]*:\/\//, "").replace(/^www\./, "").replace(/[/?#:].*$/, "");
+}
+
 function ruleMatches(rule, tab) {
-  const needle = String(rule.text || "").trim().toLowerCase();
+  let needle = String(rule.text || "").trim().toLowerCase();
+  if (rule.field === "site") needle = siteOf(needle);
   if (!needle) return false;
   if (rule.field === "site") {
     const host = hostOf(tab.url);
@@ -218,26 +224,36 @@ function groupChanges(before, after) {
     .sort((a, b) => b.count - a.count);
 }
 
-async function organiseWithClaude(instructions = "", requestedAgent = "") {
+function organiseWithClaude(instructions = "", requestedAgent = "") {
   if (Organiser.running) return Organiser.running.promise;
-  if (!bridgeReady) throw new Error("Connect an AI assistant first: open Kit's full page for the one-line setup.");
-  const agent = await chosenAgent(requestedAgent);
-  await browser.storage.local.set({ organiseAgent: agent });
-  const windowId = await focusedWindowId();
-  const agentName = ((await agentList()).find((a) => a.id === agent) || {}).name || "";
-  const before = await groupSnapshot(windowId).catch(() => []);
+  if (!bridgeReady) return Promise.reject(new Error("Connect an AI assistant first: open Kit's full page for the one-line setup."));
+  // Claim the run straight away, so a second click (menu and full page together) joins this one.
   const run = { run_id: Date.now() };
-  run.promise = new Promise((resolve) => (run.resolve = resolve)).then(async (r) => {
+  const done = new Promise((resolve) => (run.resolve = resolve));
+  Organiser.running = run;
+  run.promise = (async () => {
+    let windowId, agentName, before;
+    try {
+      const agent = await chosenAgent(requestedAgent);
+      await browser.storage.local.set({ organiseAgent: agent });
+      windowId = await focusedWindowId();
+      agentName = ((await agentList()).find((a) => a.id === agent) || {}).name || "";
+      before = await groupSnapshot(windowId).catch(() => []);
+      if (!port) throw new Error("Kit's companion app isn't running.");
+      port.postMessage({ type: "organise", run_id: run.run_id, agent, instructions: String(instructions).slice(0, 500) });
+    } catch (e) {
+      Organiser.running = null; // nothing started
+      throw e;
+    }
+    Mascot.begin(windowId, "Thinking about your tabs…");
+    const r = await done;
     Organiser.running = null;
     const changes = groupChanges(before, await groupSnapshot(windowId).catch(() => before));
     Organiser.last = { ok: r.ok, summary: r.summary, at: Date.now(), agent: agentName, changes };
     Mascot.end(r.ok, "All organised");
     if (!r.ok) throw new Error(r.summary);
     return r.summary;
-  });
-  Organiser.running = run;
-  Mascot.begin(windowId, "Thinking about your tabs…");
-  port.postMessage({ type: "organise", run_id: run.run_id, agent, instructions: String(instructions).slice(0, 500) });
+  })();
   return run.promise;
 }
 
@@ -248,18 +264,25 @@ function onHostEvent(msg) {
     if (done) done(msg);
     return;
   }
+  if (msg.event === "disconnected") {
+    // Anything still waiting on the companion app gets no answer now.
+    for (const answer of Agents.pending.values()) answer(null);
+    Agents.pending.clear();
+  }
   const run = Organiser.running;
   if (!run) return;
   if (msg.event === "organise_done" && msg.run_id === run.run_id) run.resolve(msg);
   if (msg.event === "disconnected") run.resolve({ ok: false, summary: "Kit's companion app disconnected while organising." });
 }
 
-// Same page open more than once (ignoring #fragments): keep the active or most recent copy.
+// Same page open more than once: keep the active or most recent copy. #fragments are ignored,
+// except app routes like #/inbox; copies in different containers (work and personal) aren't duplicates.
 async function findDuplicates(windowId) {
   const tabs = (await browser.tabs.query({ windowId })).filter((t) => !t.pinned && /^https?:|^file:/.test(t.url));
   const byUrl = new Map();
   for (const t of tabs) {
-    const key = t.url.split("#")[0];
+    const [page, fragment = ""] = t.url.split(/#(.*)/s);
+    const key = `${t.cookieStoreId || ""} ${/^[/!]/.test(fragment) ? t.url : page}`;
     if (!byUrl.has(key)) byUrl.set(key, []);
     byUrl.get(key).push(t);
   }
@@ -277,7 +300,7 @@ async function findDuplicates(windowId) {
 // the site or exact address.
 async function suggestRules(windowId) {
   const STOP = new Set(["google", "drive", "docs", "http", "https", "html", "with", "from", "this", "that", "home", "page", "edit", "view", "pdf"]);
-  const words = (title) => new Set((title || "").split(/[^A-Za-z0-9]+/).map((w) => w.replace(/\d+/g, "").toLowerCase())
+  const words = (title) => new Set((title || "").split(/[^A-Za-z]+/).map((w) => w.toLowerCase())
     .filter((w) => w.length >= 4 && !STOP.has(w)));
   const tabs = (await browser.tabs.query({ windowId })).filter((t) => !t.pinned);
   const groups = await browser.tabGroups.query({ windowId });
@@ -310,16 +333,18 @@ async function suggestRules(windowId) {
   return rules;
 }
 
-async function runList(index) {
+// name: the list's name when its button was drawn, in case lists were edited since.
+async function runList(index, name) {
   const { lists } = await loadSettings();
-  const list = lists[index];
+  const sameName = (l) => name === undefined || (l && l.name) === name;
+  const list = sameName(lists[index]) ? lists[index] : lists.find(sameName);
   if (!list) throw new Error("that list no longer exists");
   const windowId = await focusedWindowId();
   return withKit(windowId, `Running ${list.name || "your list"}`, async () => {
     for (const step of list.steps || []) {
       if (step.type === "collapse_all_except") await ACTIONS.collapse_all(windowId, step.arg || "");
       else if (step.type === "organise_with_claude") await organiseWithClaude(step.arg || "");
-      else if (ACTIONS[step.type]) await ACTIONS[step.type](windowId, step.arg || "");
+      else if (ACTIONS[step.type]) await ACTIONS[step.type](windowId, STEP_TYPES[step.type] && STEP_TYPES[step.type].arg ? step.arg || "" : "");
     }
     return `${list.name || "List"} done`;
   });
@@ -381,7 +406,7 @@ browser.runtime.onMessage.addListener(async (msg) => {
         return `Closed ${plural(msg.tab_ids.length, "tab")}`;
       });
     case "run_list":
-      return runList(msg.index);
+      return runList(msg.index, msg.name);
     case "suggest_rules":
       return suggestRules(windowId);
     case "step_types":
