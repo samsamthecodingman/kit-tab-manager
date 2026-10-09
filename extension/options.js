@@ -53,7 +53,7 @@ function changed(rerender = false, message) {
 function renderRules() {
   const rows = rules.map((r, i) => el("div", { className: "rule" }, [
     select(FIELDS, r.field || "title", (v) => { r.field = v; changed(); }, "Match on"),
-    input(r.text, r.field === "site" ? "edstem.org" : "text to look for", (v) => { r.text = v; changed(); }, "Text to match"),
+    input(r.text, r.field === "site" ? "example.com" : "text to look for", (v) => { r.text = v; changed(); }, "Text to match"),
     el("span", { className: "arrow", textContent: "→" }),
     input(r.group, "group name", (v) => { r.group = v; changed(); }, "Group name"),
     select(Object.fromEntries(COLORS.map((c) => [c, c])), r.color || "blue", (v) => { r.color = v; changed(); }, "Group colour"),

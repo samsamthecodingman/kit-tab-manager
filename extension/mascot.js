@@ -4,22 +4,70 @@
 // Purely cosmetic: every step swallows its own errors so it can never break a request.
 
 const ANIMATED = new Set(["group_tabs", "ungroup_tabs", "update_group", "move_tabs", "close_tabs"]);
-const WALK_SPEED = 100; // px per second: a stroll, not a sprint
+const WALK_SPEED = 120; // px per second: a brisk walk, but slow enough to keep flicker down
 // Firefox's built-in light and dark colours. With the built-in theme, getCurrent() reports no
 // colours, so the tab-bar Kit's copy of the theme spells them out; anything left unset would
-// fall back to light defaults and visibly change the browser.
+// fall back to Firefox's theme defaults and visibly change the browser. That includes the accent
+// colours (selected-tab line, loading bar, highlights, focus rings), which default to blue, so
+// those are set to Kit's orange instead.
+function accents(onAccent) {
+  const accent = "#D97757", bright = "#E8833A";
+  return {
+    tab_line: accent, tab_loading: bright, icons_attention: bright,
+    toolbar_field_border_focus: accent, toolbar_field_highlight: accent, toolbar_field_highlight_text: onAccent,
+    popup_highlight: accent, popup_highlight_text: onAccent, sidebar_highlight: accent, sidebar_highlight_text: onAccent,
+  };
+}
+// Theme colours come as "#rrggbb", "rgb(…)"/"rgba(…)" or [r, g, b(, a)]; null if unreadable.
+function parseColor(v) {
+  if (Array.isArray(v)) return v.slice(0, 3).map(Number);
+  const s = String(v).trim();
+  let m = s.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+  if (m) {
+    const h = m[1].length === 3 ? [...m[1]].map((c) => c + c).join("") : m[1];
+    return [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16));
+  }
+  m = s.match(/^rgba?\(([^)]+)\)$/i);
+  return m ? m[1].split(",").slice(0, 3).map((n) => parseFloat(n)) : null;
+}
+
+function isLight(v) {
+  const c = v === undefined ? null : parseColor(v);
+  if (!c) return true; // unknown: treat as Firefox's light default
+  const [r, g, b] = c.map((n) => n / 255);
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.5;
+}
+
+// Same hue and saturation, lightness mirrored (light blue -> dark navy, dark text -> light text).
+function flipLightness(v) {
+  const c = parseColor(v);
+  if (!c) return v;
+  const [r, g, b] = c.map((n) => n / 255);
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), l = (max + min) / 2, d = max - min;
+  let h = 0, sat = 0;
+  if (d) {
+    sat = d / (1 - Math.abs(2 * l - 1));
+    h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  }
+  const L = 1 - l, C = (1 - Math.abs(2 * L - 1)) * sat, X = C * (1 - Math.abs((h % 2 + 2) % 2 - 1)), m = L - C / 2;
+  const [r1, g1, b1] = [[C, X, 0], [X, C, 0], [0, C, X], [0, X, C], [X, 0, C], [C, 0, X]][Math.floor((h + 6) % 6)];
+  return `rgb(${[r1, g1, b1].map((n) => Math.round((n + m) * 255)).join(", ")})`;
+}
+
 const BASE_PALETTE = {
   light: {
     frame: "#F0F0F4", frame_inactive: "#EBEBEF", tab_background_text: "#15141A",
     toolbar: "#F9F9FB", toolbar_text: "#15141A", toolbar_field: "#FFFFFF", toolbar_field_text: "#15141A",
     tab_selected: "#FFFFFF", tab_text: "#15141A", popup: "#FFFFFF", popup_text: "#15141A",
     sidebar: "#FFFFFF", sidebar_text: "#15141A", ntp_background: "#F9F9FB", ntp_text: "#15141A",
+    ...accents("#FFFFFF"),
   },
   dark: {
     frame: "#1C1B22", frame_inactive: "#1F1E25", tab_background_text: "#FBFBFE",
     toolbar: "#2B2A33", toolbar_text: "#FBFBFE", toolbar_field: "#1C1B22", toolbar_field_text: "#FBFBFE",
     tab_selected: "#42414D", tab_text: "#FBFBFE", popup: "#42414D", popup_text: "#FBFBFE",
     sidebar: "#38373F", sidebar_text: "#FBFBFE", ntp_background: "#2B2A33", ntp_text: "#FBFBFE",
+    ...accents("#1C1B22"),
   },
 };
 
@@ -57,6 +105,7 @@ const TabBarKit = {
   onArrive: null,
   leaving: null,
   shown: null,
+  layered: false,
   cache: new Map(),
   waiters: [],
   facingLeft: true,
@@ -108,6 +157,7 @@ const TabBarKit = {
     clearInterval(this.timer);
     this.timer = null;
     this.shown = null;
+    this.layered = false;
     this.active = false;
     this.flushWaiters();
     this.onArrive = null;
@@ -122,12 +172,17 @@ const TabBarKit = {
       const moving = Math.abs(gap) > 0.5;
       if (moving) this.facingLeft = gap < 0; // Kit faces the way it walks, and keeps facing that way when it stops
       this.x = reduce || Math.abs(gap) <= step ? this.target : this.x + Math.sign(gap) * step;
-      // Firefox blanks the tab bar briefly whenever the picture changes, so only send a
-      // picture when it actually differs from the one showing.
+      // Firefox blanks a new picture until it has loaded, so only send one when it differs from
+      // the one showing, and layer it over the previous picture for one frame so there is always
+      // a Kit on screen while it loads. The next frame drops the previous picture again.
       const url = this.frameUrl(moving && !reduce);
       if (url !== this.shown) {
+        this.layered = !!this.shown;
+        Mascot.applyTheme(this.layered ? [url, this.shown] : [url]);
         this.shown = url;
-        Mascot.applyTheme(url);
+      } else if (this.layered) {
+        Mascot.applyTheme([url]);
+        this.layered = false;
       }
       if (!moving) this.flushWaiters();
       if (!moving && this.onArrive) this.onArrive();
@@ -163,13 +218,13 @@ const TabBarKit = {
       ctx.font = "600 11px system-ui, sans-serif";
       const w = Math.ceil(ctx.measureText(text).width) + 16;
       const bx = x + KIT_W * 2 + 8, by = 11; // to the right of Kit, away from the tabs on the left
-      ctx.fillStyle = this.done ? "#EAF3DE" : "#FAECE7";
-      ctx.strokeStyle = this.done ? "#97C459" : "#F0997B";
+      ctx.fillStyle = this.done ? "#E8833A" : "#FAECE7"; // "Done" in Kit's hoodie orange
+      ctx.strokeStyle = this.done ? "#B8602A" : "#F0997B";
       ctx.beginPath();
       ctx.roundRect(bx + 0.5, by + 0.5, w, 18, 8);
       ctx.fill();
       ctx.stroke();
-      ctx.fillStyle = this.done ? "#27500A" : "#712B13";
+      ctx.fillStyle = this.done ? "#2C2C2A" : "#712B13";
       ctx.textBaseline = "middle";
       ctx.fillText(text, bx + 8, by + 10);
     }
@@ -199,7 +254,7 @@ const Mascot = {
   // "Say hi" in the toolbar menu: a hello in the tab bar without touching any tabs.
   demo(tab) {
     this.begin(tab.windowId, "Hi! I'm Kit");
-    this.end(true, "Bye!");
+    this.end(true, "Bye!", ["Ask me to organise your tabs!"]);
   },
 
   begin(windowId, label) {
@@ -212,7 +267,8 @@ const Mascot = {
   },
 
   // Once Kit has walked in and its message has had time to be read, say how it went, then leave.
-  end(ok, doneText = "Done") {
+  // lines: anything else to say first, one bubble each.
+  end(ok, doneText = "Done", lines = []) {
     if (this.busy === 0 || --this.busy > 0) return;
     const said = ok ? doneText : "That didn't work";
     const token = (this.endToken = {});
@@ -220,7 +276,13 @@ const Mascot = {
     (async () => {
       await this.ready;
       await TabBarKit.whenStill();
-      await new Promise((r) => (this.timer = setTimeout(r, TAB_BAR_HOLD_MS)));
+      const hold = () => new Promise((r) => (this.timer = setTimeout(r, TAB_BAR_HOLD_MS)));
+      await hold();
+      for (const line of lines) {
+        if (!current()) return;
+        TabBarKit.say(line, false);
+        await hold();
+      }
       if (!current()) return;
       TabBarKit.say(said, ok);
       this.timer = setTimeout(() => current() && this.finish(), TAB_BAR_HOLD_MS);
@@ -247,7 +309,15 @@ const Mascot = {
       const set = (obj) => Object.fromEntries(Object.entries(obj || {}).filter(([, v]) => v !== null && v !== undefined));
       const own = set(current.colors);
       const builtIn = Object.keys(own).length === 0;
-      const theme = { colors: builtIn ? { ...BASE_PALETTE[scheme] } : own };
+      let colors = builtIn ? { ...BASE_PALETTE[scheme] } : own;
+      // Themes with separate light and dark versions (like Mozilla's colour themes) report only
+      // their light colours here, even while Firefox shows the dark version. When the copy's
+      // brightness doesn't match the mode Firefox is in, flip each colour's lightness (keeping its
+      // hue), which comes out close to the theme's own dark version.
+      if (!builtIn && isLight(colors.frame || colors.toolbar) !== (scheme === "light")) {
+        colors = Object.fromEntries(Object.entries(colors).map(([k, v]) => [k, flipLightness(v)]));
+      }
+      const theme = { colors };
       if (Object.keys(set(current.images)).length) theme.images = set(current.images);
       // Pin both the browser UI and web pages to the scheme in use, so pages don't flip to light.
       theme.properties = { ...set(current.properties), color_scheme: scheme, content_color_scheme: scheme };
@@ -257,16 +327,17 @@ const Mascot = {
     }
   },
 
-  // The copied theme plus one tab-bar Kit frame, placed in front of any backgrounds it had.
-  applyTheme(frameUrl) {
+  // The copied theme plus Kit's frame picture(s), placed in front of any backgrounds it had.
+  // frameUrls: newest first; each is a window-wide transparent picture.
+  applyTheme(frameUrls) {
     if (!this.themed || !this.theme || this.windowId === null) return;
     const t = this.theme;
     const images = { ...(t.images || {}) };
     const props = { ...t.properties };
     const list = (v) => (Array.isArray(v) ? v : []);
-    images.additional_backgrounds = [frameUrl, ...list(images.additional_backgrounds)];
-    props.additional_backgrounds_alignment = ["left top", ...list(props.additional_backgrounds_alignment)];
-    props.additional_backgrounds_tiling = ["no-repeat", ...list(props.additional_backgrounds_tiling)];
+    images.additional_backgrounds = [...frameUrls, ...list(images.additional_backgrounds)];
+    props.additional_backgrounds_alignment = [...frameUrls.map(() => "left top"), ...list(props.additional_backgrounds_alignment)];
+    props.additional_backgrounds_tiling = [...frameUrls.map(() => "no-repeat"), ...list(props.additional_backgrounds_tiling)];
     browser.theme.update(this.windowId, { ...t, images, properties: props }).catch(() => {});
   },
 

@@ -15,7 +15,7 @@ Let Claude Code list, group, move, switch, close and read your tabs, or tidy up 
 
 <br>
 
-<img src="docs/kit-tab-bar.gif" alt="Kit walking along the Firefox tab bar, saying 'Grouping 2 tabs → Theory', then 'Done'" width="100%">
+<img src="docs/kit-tab-bar.gif" alt="Kit walking along the Firefox tab bar, saying 'Grouping 2 tabs → Trip', then 'Done'" width="100%">
 
 <sub>Kit walks along your tab bar and narrates while tabs change, on every page.</sub>
 
@@ -39,10 +39,10 @@ Let Claude Code list, group, move, switch, close and read your tabs, or tidy up 
 | | |
 |---|---|
 | 🗂️ **Tabs as tools for Claude** | Claude Code can list your tabs and groups, group and ungroup, rename and recolour groups, move and switch tabs, close tabs, and read a tab's text. |
-| ✨ **Organise with Claude** | One button in Firefox asks Claude to sort your tabs into sensible groups, without opening a chat. Add an optional instruction like "keep coursework together". |
-| 📏 **Your own rules** | "Titles containing *week* go in **Theory**", "edstem.org goes in **Moodle+EdStem**". Apply them in one click, offline and free. Rules can be suggested from the groups you already have. |
+| ✨ **Organise with Claude** | One button in Firefox asks Claude to sort your tabs into sensible groups, without opening a chat. Add an optional instruction like "keep work and personal apart". |
+| 📏 **Your own rules** | "Titles containing *recipe* go in **Cooking**", "github.com goes in **Code**". Apply them in one click, offline and free. Rules can be suggested from the groups you already have. |
 | 🧹 **One-click tidy-ups** | Group loose tabs by website, sort tabs within groups, collapse all groups, and close duplicate tabs (after showing you which). |
-| 📋 **Action lists** | Chain steps into a named button, like **Study mode**: apply my rules, then collapse everything except Theory. |
+| 📋 **Action lists** | Chain steps into a named button, like **Focus mode**: apply my rules, then collapse everything except Code. |
 | 🦊 **Kit** | A little pixel-art mascot walks along the tab bar and says what's happening. It never changes your theme's colours. |
 
 <table>
@@ -50,11 +50,14 @@ Let Claude Code list, group, move, switch, close and read your tabs, or tidy up 
     <td align="center" width="34%"><img src="docs/menu.png" alt="The Kit toolbar menu" width="260"><br><sub>The toolbar menu</sub></td>
     <td align="center"><img src="docs/settings.png" alt="The rules and lists settings page" width="100%"><br><sub>Rules and lists</sub></td>
   </tr>
+  <tr>
+    <td align="center" colspan="2"><img src="docs/full-page.png" alt="Kit's full page: a greeting from Kit, live tab counts, Organise with Claude and every tidy-up" width="100%"><br><sub>The full page, with every feature explained</sub></td>
+  </tr>
 </table>
 
 ## Meet Kit
 
-<img src="docs/kit-tab-bar.png" alt="Kit standing in the tab bar next to a speech bubble saying 'Grouping 2 tabs → Theory'" width="100%">
+<img src="docs/kit-tab-bar.png" alt="Kit standing in the tab bar next to a speech bubble saying 'Grouping 2 tabs → Trip'" width="100%">
 
 Kit is half Claude, half Firefox: a little Claude-orange creature in a Firefox-orange fox hoodie, complete with hood ears and a bushy tail. Whenever your tabs change, Kit walks in along the tab bar, stops to say what it's doing, then walks off, always facing the way it's going.
 
@@ -80,11 +83,13 @@ flowchart LR
 
 ## Install
 
-You need Firefox 142 or later, [Claude Code](https://claude.com/claude-code), [`uv`](https://docs.astral.sh/uv/) and Python 3.11+.
+You need Linux, Firefox 142 or later, [Claude Code](https://claude.com/claude-code), [`uv`](https://docs.astral.sh/uv/) and Python 3.11+.
 
-**1. Register the native host with Firefox**
+**1. Get the code and register the companion app with Firefox**
 
 ```bash
+git clone https://github.com/samsamthecodingman/kit-tab-manager.git
+cd kit-tab-manager
 ./install.sh
 ```
 
@@ -96,7 +101,7 @@ claude mcp add --scope user firefox-tabs -- uv run --script "$PWD/mcp/server.py"
 
 **3. Install the extension**
 
-- **Signed (permanent):** run [`./sign.sh`](#signing) once to have Mozilla sign it, then open the `.xpi` from `web-ext-artifacts/` in Firefox and click **Add**.
+- **From addons.mozilla.org:** [install Kit](https://addons.mozilla.org/firefox/addon/kit-tab-manager/). Firefox keeps it up to date.
 - **Temporary (for development):** open `about:debugging` → **This Firefox** → **Load Temporary Add-on…** and pick `extension/manifest.json`. Firefox removes it when it restarts.
 
 The toolbar button shows **Connected to Claude Code** once everything is in place.
@@ -105,11 +110,11 @@ The toolbar button shows **Connected to Claude Code** once everything is in plac
 
 **From Claude Code**, just ask:
 
-> *Group my ECE4179 tabs by topic and collapse the ones I'm not using.*
+> *Group my trip-planning tabs and collapse the ones I'm not using.*
 >
-> *Which of my tabs are about batch norm? Summarise the open lecture PDF.*
+> *Which of my tabs are about Kyoto? Summarise the one with the guesthouse list.*
 >
-> *Close the duplicate Ed Discussion tabs.*
+> *Close the duplicate GitHub tabs.*
 
 **From Firefox**, click the Kit button:
 
@@ -117,7 +122,8 @@ The toolbar button shows **Connected to Claude Code** once everything is in plac
 - **Tidy up** runs the one-click actions.
 - **My lists** runs your saved action lists.
 - **Rules & lists** opens the settings page.
-- **Say hi** brings Kit out without touching any tabs.
+- **Say hi** (top right) brings Kit out without touching any tabs.
+- **⤢** (top right) opens Kit's full page, which explains every feature and shows live counts of your tabs, groups and duplicates.
 
 ## Safety and privacy
 
@@ -145,19 +151,19 @@ npx web-ext lint --source-dir extension # check the extension
 ```
 
 <details>
-<summary><b>Signing</b></summary>
+<summary><b>Releasing a new version</b></summary>
 
-Firefox only installs extensions permanently once Mozilla has signed them. Kit is signed as an **unlisted** add-on: Mozilla reviews it automatically and signs it, but it never appears on addons.mozilla.org.
+Firefox only installs extensions that Mozilla has signed, and each version is signed once, so bump `version` in `extension/manifest.json` first.
 
-1. Sign in at [addons.mozilla.org](https://addons.mozilla.org/developers/) and create an API key under **Tools → Manage API Keys**.
-2. Run:
+- **Automatically:** push a tag that matches the version, e.g. `git tag v0.6.0 && git push --tags`. The [release workflow](.github/workflows/release.yml) checks the extension and submits it to addons.mozilla.org. It needs the repository secrets `WEB_EXT_API_KEY` and `WEB_EXT_API_SECRET` (from **Developer Hub → Tools → Manage API Keys**).
+- **From your computer:** `./sign.sh --listed` submits to addons.mozilla.org, and `./sign.sh` signs a private (unlisted) `.xpi` into `web-ext-artifacts/` instead.
 
-   ```bash
-   ./sign.sh
-   ```
-
-3. Install the `.xpi` it writes to `web-ext-artifacts/`.
-
-Bump `version` in `extension/manifest.json` before signing a new build; Mozilla won't sign the same version twice.
+Listing text, screenshots and reviewer notes for addons.mozilla.org are in [`docs/amo-listing.md`](docs/amo-listing.md).
 
 </details>
+
+## License and credits
+
+Kit is released under the [MIT License](LICENSE). See the [privacy policy](PRIVACY.md) for what it does with your data.
+
+Kit is an independent project and isn't made or endorsed by Anthropic or Mozilla. Claude and Claude Code are products of Anthropic; Firefox is a trademark of the Mozilla Foundation.

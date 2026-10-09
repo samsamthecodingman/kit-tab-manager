@@ -1,8 +1,9 @@
 {
   "manifest_version": 2,
   "name": "Kit: Tab manager for Claude Code",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "description": "Lets Claude Code list, group, move, close and read your Firefox tabs through a local bridge, with one-click tidy-ups and Kit, its tab-bar mascot. It never clicks, types or submits anything.",
+  "homepage_url": "https://github.com/samsamthecodingman/kit-tab-manager",
   "icons": {
     "48": "icons/kit-48.png",
     "96": "icons/kit-96.png",

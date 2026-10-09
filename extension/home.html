@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kit: Tab manager for Claude Code</title>
+<link rel="icon" href="icons/kit-toolbar-32.png">
+<link rel="stylesheet" href="home.css">
+</head>
+<body>
+<div class="page">
+
+<nav class="topbar">
+  <div class="brand"><img src="icons/kit-toolbar-32.png" alt="" width="24" height="24"><span>Kit</span></div>
+  <span id="conn" class="conn" role="status"><span class="dot"></span><span class="label">Checking…</span></span>
+  <div class="spacer"></div>
+  <button id="nav-rules" class="ghost">Rules &amp; lists</button>
+</nav>
+
+<header class="hero">
+  <div class="hero-text">
+    <p class="eyebrow">Tab manager for Claude Code</p>
+    <h1>Hi, I'm Kit.</h1>
+    <p class="lede">I keep your Firefox tabs tidy: on my own with your rules and one-click tidy-ups, or with Claude when you want something smarter.</p>
+    <div class="hero-actions">
+      <button id="hero-organise" class="primary big">Organise my tabs</button>
+      <button id="hero-hi" class="secondary big">Say hi</button>
+    </div>
+    <dl class="stats" aria-label="This window">
+      <div><dt>Tabs</dt><dd id="st-tabs">–</dd></div>
+      <div><dt>Groups</dt><dd id="st-groups">–</dd></div>
+      <div><dt>Loose</dt><dd id="st-loose">–</dd></div>
+      <div><dt>Duplicates</dt><dd id="st-dupes">–</dd></div>
+    </dl>
+  </div>
+  <div class="stage" id="stage" aria-hidden="true">
+    <div class="stage-bar">
+      <span class="s-label" style="--c:#1D9E9E">Trip</span><span class="s-tab" style="--c:#1D9E9E">Flights to Tokyo</span>
+      <span class="s-label" style="--c:#E8833A">Cooking</span><span class="s-tab sel" style="--c:#E8833A">Miso ramen</span>
+      <span class="s-plus">+</span>
+    </div>
+    <div class="stage-floor">
+      <div class="skeleton"><i></i><i></i><i></i><i></i></div>
+      <div class="walker" id="walker">
+        <div class="bubble" id="bubble">Hi! I'm Kit</div>
+        <canvas id="stage-kit"></canvas>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main>
+  <section class="block" id="organise">
+    <div class="block-head">
+      <h2>Organise with Claude</h2>
+      <p>Claude looks at your tab titles and addresses and sorts them into sensible groups, keeping the groups you already have. It can group, move and rename, but never close a tab or read a page.</p>
+    </div>
+    <div class="card organise-card">
+      <label for="instructions">Anything specific? <span class="muted">(optional)</span></label>
+      <textarea id="instructions" rows="2" maxlength="500" placeholder="e.g. keep work and personal apart"></textarea>
+      <div class="row">
+        <button id="organise-btn" class="primary">Organise my tabs</button>
+        <p id="organise-note" class="muted small">Takes 20–60 seconds. You can keep browsing while Kit works.</p>
+      </div>
+      <p id="organise-result" class="result" hidden></p>
+    </div>
+  </section>
+
+  <section class="block">
+    <div class="block-head">
+      <h2>One-click tidy-ups</h2>
+      <p>Instant, offline and free. Kit walks out to show you what's happening.</p>
+    </div>
+    <div class="grid" id="tidy">
+      <article class="card action">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h10M4 12h7M4 18h10M17 9l3 3-3 3M13 12h7"/></svg>
+        <h3>Apply my rules</h3>
+        <p>Put each tab in the group your rules say, like recipes into Cooking.</p>
+        <button data-action="apply_rules">Run</button>
+      </article>
+      <article class="card action">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.5 2.6 2.5 14.4 0 17M12 3.5c-2.5 2.6-2.5 14.4 0 17"/></svg>
+        <h3>Group by website</h3>
+        <p>Any site with two or more loose tabs gets a group of its own.</p>
+        <button data-action="group_by_site">Run</button>
+      </article>
+      <article class="card action">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4v16M4 17l3 3 3-3M14 6h6M14 12h4.5M14 18h3"/></svg>
+        <h3>Sort each group</h3>
+        <p>Put the tabs inside every group in alphabetical order.</p>
+        <button data-action="sort_groups">Run</button>
+      </article>
+      <article class="card action">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4l5 5 5-5M7 20l5-5 5 5"/></svg>
+        <h3>Collapse all groups</h3>
+        <p>Fold every group away for a clean tab bar.</p>
+        <button data-action="collapse_all">Run</button>
+      </article>
+      <article class="card action" id="dupe-card">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="11" height="11" rx="2"/><path d="M9 20h9a2 2 0 0 0 2-2V9"/></svg>
+        <h3>Close duplicates</h3>
+        <p>Close extra copies of the same page. You see the list first.</p>
+        <button id="dupes">Check</button>
+        <div id="dupe-panel" class="dupe-panel" hidden>
+          <p id="dupe-msg" class="small"></p>
+          <ul id="dupe-list"></ul>
+          <div class="row">
+            <button id="dupe-close" class="primary">Close them</button>
+            <button id="dupe-cancel" class="secondary">Cancel</button>
+          </div>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <section class="block">
+    <div class="block-head split">
+      <div>
+        <h2>Your lists</h2>
+        <p>Steps that run in order, like a <em>Focus mode</em> that applies your rules then collapses everything else.</p>
+      </div>
+      <button class="secondary" data-open="options">Edit lists</button>
+    </div>
+    <div class="grid" id="lists"></div>
+    <div id="no-lists" class="card empty" hidden>
+      <p>No lists yet. Chain a few steps into your own one-click button.</p>
+      <button class="secondary" data-open="options">Make a list</button>
+    </div>
+  </section>
+
+  <section class="block">
+    <div class="block-head split">
+      <div>
+        <h2>Your rules</h2>
+        <p id="rules-summary">Rules decide which group a tab belongs in.</p>
+      </div>
+      <button class="secondary" data-open="options">Edit rules</button>
+    </div>
+    <ul class="card rules" id="rules"></ul>
+    <div id="no-rules" class="card empty" hidden>
+      <p>No rules yet. Kit can suggest some from the way your tabs are grouped now.</p>
+      <button class="secondary" data-open="options">Set up rules</button>
+    </div>
+  </section>
+
+  <section class="block">
+    <div class="block-head">
+      <h2>Ask Claude Code</h2>
+      <p>With Kit installed, Claude Code can see and manage your tabs. Try asking:</p>
+    </div>
+    <div class="grid prompts">
+      <figure class="card prompt"><blockquote>Group my trip-planning tabs and collapse the ones I'm not using.</blockquote><button class="copy secondary">Copy</button></figure>
+      <figure class="card prompt"><blockquote>Which tab has the guesthouse list? Switch to it and summarise it.</blockquote><button class="copy secondary">Copy</button></figure>
+      <figure class="card prompt"><blockquote>Close the duplicate GitHub tabs, but show me which ones first.</blockquote><button class="copy secondary">Copy</button></figure>
+    </div>
+    <p class="tools muted small">Claude's tools: <code>list_tabs</code> <code>list_groups</code> <code>group_tabs</code> <code>ungroup_tabs</code> <code>update_group</code> <code>move_tabs</code> <code>activate_tab</code> <code>close_tabs</code> <code>read_tab</code></p>
+  </section>
+</main>
+
+<footer class="foot">
+  <p>Kit never clicks, types or submits anything, and never sees private windows. Your tabs only reach Anthropic when you use Claude.</p>
+  <p class="muted">Kit is an independent project, not made by Anthropic or Mozilla. <span id="version"></span></p>
+</footer>
+
+</div>
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+<script src="kit.js"></script>
+<script src="home.js"></script>
+</body>
+</html>

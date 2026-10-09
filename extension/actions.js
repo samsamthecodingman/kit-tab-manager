@@ -285,6 +285,16 @@ browser.runtime.onMessage.addListener(async (msg) => {
       return withKit(windowId, ACTION_LABELS[msg.action], () => ACTIONS[msg.action](windowId, msg.arg || ""));
     case "find_duplicates":
       return findDuplicates(windowId);
+    case "overview": {
+      const tabs = (await browser.tabs.query({ windowId })).filter((t) => !t.url.startsWith(browser.runtime.getURL("")));
+      const groups = await browser.tabGroups.query({ windowId });
+      return {
+        tabs: tabs.length,
+        groups: groups.length,
+        loose: tabs.filter((t) => !t.pinned && t.groupId === -1).length,
+        duplicates: (await findDuplicates(windowId)).length,
+      };
+    }
     case "close_tabs":
       return withKit(windowId, `Closing ${plural(msg.tab_ids.length, "tab")}`, async () => {
         await HANDLERS.close_tabs({ tab_ids: msg.tab_ids });

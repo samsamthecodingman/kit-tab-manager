@@ -57,7 +57,7 @@ async function init() {
   drawHeader();
   const { connected, lists, organise } = await send({ cmd: "status" });
   showOrganise(organise, true);
-  $("conn").textContent = connected ? "Connected to Claude Code" : "Bridge not running";
+  $("conn").textContent = connected ? "Connected" : "Bridge not running";
   $("lists").replaceChildren(...lists.map((name, index) => {
     const b = document.createElement("button");
     b.textContent = name;
@@ -100,7 +100,12 @@ $("organise").addEventListener("click", () => {
   showOrganise({ running: true });
 });
 
-$("hi").addEventListener("click", () => { send({ cmd: "hi" }); window.close(); });
+const sayHi = () => { send({ cmd: "hi" }); window.close(); };
+$("hi").addEventListener("click", sayHi);
+$("kit-hi").addEventListener("click", sayHi);
+const openHome = () => { browser.tabs.create({ url: browser.runtime.getURL("home.html") }); window.close(); };
+$("expand").addEventListener("click", openHome);
+$("expand-foot").addEventListener("click", openHome);
 $("options").addEventListener("click", () => { browser.runtime.openOptionsPage(); window.close(); });
 
 init().catch((e) => status(String((e && e.message) || e), "bad"));
