@@ -6,12 +6,12 @@
 
 **A tab manager for Firefox, LibreWolf, Floorp, Waterfox and Zen, with an AI assistant when you want one.**
 
-Works with Claude Code today, with more AI assistants to come.
+Works with Claude Code, Codex, Gemini CLI, Cursor and other MCP-compatible AI assistants.
 
-Let Claude Code list, group, move, switch, close and read your tabs, or tidy up in one click from the toolbar.
+Let your AI assistant list, group, move, switch, close and read your tabs, or tidy up in one click from the toolbar.
 
 ![Firefox 142+](https://img.shields.io/badge/Firefox-142%2B-FF7139?logo=firefoxbrowser&logoColor=white)
-![Claude Code MCP](https://img.shields.io/badge/Claude%20Code-MCP%20server-D97757)
+![MCP server](https://img.shields.io/badge/MCP-server-D97757)
 ![Python 3.8+](https://img.shields.io/badge/Python-3.8%2B-3776AB?logo=python&logoColor=white)
 ![Linux and macOS](https://img.shields.io/badge/AI%20features-Linux%20%7C%20macOS-555)
 
@@ -40,8 +40,8 @@ Let Claude Code list, group, move, switch, close and read your tabs, or tidy up 
 
 | | |
 |---|---|
-| 🗂️ **Tabs as tools for Claude** | Claude Code can list your tabs and groups, group and ungroup, rename and recolour groups, move and switch tabs, close tabs, and read a tab's text. |
-| ✨ **Organise with Claude** | One button in your browser asks Claude to sort your tabs into sensible groups, without opening a chat. Add an optional instruction like "keep work and personal apart". |
+| 🗂️ **Tabs as tools for your AI** | Your AI assistant can list your tabs and groups, group and ungroup, rename and recolour groups, move and switch tabs, close tabs, and read a tab's text. |
+| ✨ **Organise with AI** | One button in your browser asks Claude Code to sort your tabs into sensible groups, without opening a chat. Add an optional instruction like "keep work and personal apart". |
 | 📏 **Your own rules** | "Titles containing *recipe* go in **Cooking**", "github.com goes in **Code**". Apply them in one click, offline and free. Rules can be suggested from the groups you already have. |
 | 🧹 **One-click tidy-ups** | Group loose tabs by website, sort tabs within groups, collapse all groups, and close duplicate tabs (after showing you which). |
 | 📋 **Action lists** | Chain steps into a named button, like **Focus mode**: apply my rules, then collapse everything except Code. |
@@ -53,7 +53,7 @@ Let Claude Code list, group, move, switch, close and read your tabs, or tidy up 
     <td align="center"><img src="docs/settings.png" alt="The rules and lists settings page" width="100%"><br><sub>Rules and lists</sub></td>
   </tr>
   <tr>
-    <td align="center" colspan="2"><img src="docs/full-page.png" alt="Kit's full page: a greeting from Kit, live tab counts, Organise with Claude and every tidy-up" width="100%"><br><sub>The full page, with every feature explained</sub></td>
+    <td align="center" colspan="2"><img src="docs/full-page.png" alt="Kit's full page: a greeting from Kit, live tab counts, Organise with AI and every tidy-up" width="100%"><br><sub>The full page, with every feature explained</sub></td>
   </tr>
 </table>
 
@@ -81,11 +81,11 @@ Chrome, Edge and other Chromium browsers aren't supported yet.
 
 ```mermaid
 flowchart LR
-    CC["Claude Code<br/>(or any MCP assistant)"] -- stdio --> MCP["kit.py mcp<br/>MCP server"]
+    CC["Your AI assistant<br/>(Claude Code, Codex, Gemini CLI…)"] -- stdio --> MCP["kit.py mcp<br/>MCP server"]
     MCP -- "Unix socket<br/>(only you can open it)" --> HOST["kit.py<br/>companion app"]
     HOST -- "native messaging" --> EXT["extension/<br/>browser add-on"]
     EXT -- "tabs + tabGroups APIs" --> FF(("Your browser"))
-    EXT -. "Organise with Claude" .-> HOST
+    EXT -. "Organise with AI" .-> HOST
     HOST -. "claude -p<br/>(grouping tools only)" .-> CC
 ```
 
@@ -103,15 +103,21 @@ flowchart LR
 
 **2. Optional: connect your AI assistant** (Linux or macOS)
 
-To let [Claude Code](https://claude.com/claude-code) see your tabs and use **Organise with Claude**, run this once in a terminal:
+To let your AI assistant see your tabs, and to use **Organise with AI**, run this once in a terminal:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/samsamthecodingman/kit-tab-manager/master/install.sh | sh
 ```
 
-It installs Kit's companion app in your home folder (it needs `python3`, which most systems already have), registers it with your browsers, and connects Claude Code if you have it. Kit's menu then says **AI assistant connected**. Run it again any time to update; `sh install.sh --uninstall` removes it.
+It installs Kit's companion app in your home folder (it needs `python3`, which most systems already have), registers it with your browsers, and connects the AI assistants it finds. Kit's menu then says **AI assistant connected**. Run it again any time to update; `sh install.sh --uninstall` removes it.
 
-Other assistants that support MCP can use Kit's tools too: point them at `python3 ~/.local/share/kit/kit.py mcp` (on macOS, `~/Library/Application Support/Kit/kit.py`).
+| AI assistant | Setup | Status |
+|---|---|---|
+| [Claude Code](https://claude.com/claude-code) | Connected automatically | Tested. Also powers **Organise with AI**. |
+| Codex, Gemini CLI, Cursor, Windsurf, Claude Desktop | Connected automatically if installed | Should work (they all speak MCP); not tested yet |
+| VS Code and other MCP apps | Add by hand: run `python3 ~/.local/share/kit/kit.py mcp` (on macOS, `~/Library/Application Support/Kit/kit.py`) | Should work |
+
+The installer only edits an assistant's settings if that assistant is installed, keeps a one-time backup (`*.before-kit`) of each file it changes, and leaves alone any file it can't read safely.
 
 <details>
 <summary><b>Installing from a copy of the code instead</b></summary>
@@ -128,7 +134,7 @@ To try the extension from the code, open `about:debugging` → **This Firefox** 
 
 ## Use it
 
-**From Claude Code**, just ask:
+**From your AI assistant**, just ask:
 
 > *Group my trip-planning tabs and collapse the ones I'm not using.*
 >
@@ -138,7 +144,7 @@ To try the extension from the code, open `about:debugging` → **This Firefox** 
 
 **From your browser**, click the Kit button:
 
-- **Organise my tabs** asks Claude to group everything. It takes 20–60 seconds; you can close the menu while it works, and the summary is waiting when you reopen it.
+- **Organise my tabs** asks Claude Code to group everything. It takes 20–60 seconds; you can close the menu while it works, and the summary is waiting when you reopen it.
 - **Tidy up** runs the one-click actions.
 - **My lists** runs your saved action lists.
 - **Rules & lists** opens the settings page.
@@ -149,19 +155,19 @@ To try the extension from the code, open `about:debugging` → **This Firefox** 
 
 - **No clicking, typing or form submission.** The extension never navigates to new addresses or submits anything.
 - **Private windows are invisible** to Kit: their tabs are never listed or read.
-- **Page text is data, not instructions.** `read_tab` returns whatever a page says; Claude is told to treat it as untrusted.
+- **Page text is data, not instructions.** `read_tab` returns whatever a page says; the AI is told to treat it as untrusted.
 - **Closed tabs can be recovered.** They're logged to `~/.local/share/tab-bridge/closed.jsonl`, and Firefox's **History → Recently Closed Tabs** reopens them. Closing duplicates from the menu always shows you the list first.
-- **Organise with Claude is fenced in.** It runs `claude -p` (Sonnet) in an empty folder, with no shell, file or web tools and only the grouping tools. It cannot close or read tabs, anything else is refused automatically, and it stops after 5 minutes. Runs are logged to `~/.local/share/tab-bridge/organise.log`.
-- **What leaves your machine:** only when you use Claude (from Claude Code or **Organise with Claude**) are tab titles and addresses, and any page text Claude asks to read, sent to Anthropic as part of that conversation. Rules, lists and one-click actions run entirely locally.
+- **Organise with AI is fenced in.** It runs `claude -p` (Sonnet) in an empty folder, with no shell, file or web tools and only the grouping tools. It cannot close or read tabs, anything else is refused automatically, and it stops after 5 minutes. Runs are logged to `~/.local/share/tab-bridge/organise.log`.
+- **What leaves your machine:** only when you use an AI assistant (or **Organise with AI**) are tab titles and addresses, and any page text it asks to read, sent to that assistant's provider as part of your conversation: Anthropic for Claude Code and **Organise with AI**, OpenAI for Codex, Google for Gemini CLI, and so on. Rules, lists and one-click actions run entirely locally.
 
 ## Troubleshooting
 
 | Symptom | Fix |
 |---|---|
 | Menu says **AI not connected** | That's expected if you haven't run the setup command; Kit's other features still work. If you have, run it again, then reload the extension from `about:addons`. |
-| Claude says **Firefox isn't connected** | Make sure Firefox is open and the extension is loaded (a temporary add-on disappears on restart). |
+| Your AI assistant says **Firefox isn't connected** | Make sure Firefox is open and the extension is loaded (a temporary add-on disappears on restart). |
 | A tab can't be read | Firefox doesn't let extensions read built-in pages (`about:`, the PDF viewer, addons.mozilla.org). |
-| Organise with Claude fails | Check `~/.local/share/tab-bridge/organise.log`; the `detail` field has Claude's error output. |
+| Organise with AI fails | Check `~/.local/share/tab-bridge/organise.log`; the `detail` field has Claude's error output. |
 
 ## Development
 

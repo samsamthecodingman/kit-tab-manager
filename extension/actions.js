@@ -11,7 +11,7 @@ const STEP_TYPES = {
   expand_group: { label: "Expand group…", arg: "group name" },
   switch_to: { label: "Switch to tab whose title contains…", arg: "title text" },
   close_duplicates: { label: "Close duplicate tabs (without asking)" },
-  organise_with_claude: { label: "Organise with Claude", arg: "anything specific? (optional)" },
+  organise_with_claude: { label: "Organise with AI", arg: "anything specific? (optional)" },
 };
 
 async function loadSettings() {
@@ -164,7 +164,7 @@ const ACTION_LABELS = {
   close_duplicates: "Closing duplicates",
 };
 
-// "Organise with Claude": the native host runs Claude Code headless with only the grouping
+// "Organise with AI": the native host runs Claude Code headless with only the grouping
 // tools; its changes come back through the bridge, so Kit narrates them as they happen.
 const Organiser = { running: null, last: null };
 
@@ -190,7 +190,7 @@ function onHostEvent(msg) {
   const run = Organiser.running;
   if (!run) return;
   if (msg.event === "organise_done" && msg.run_id === run.run_id) run.resolve(msg);
-  if (msg.event === "disconnected") run.resolve({ ok: false, summary: "The bridge disconnected while Claude was working." });
+  if (msg.event === "disconnected") run.resolve({ ok: false, summary: "Kit's companion app disconnected while organising." });
 }
 
 // Same page open more than once (ignoring #fragments): keep the active or most recent copy.

@@ -30,7 +30,7 @@ function drawHeader() {
 const RECENT_MS = 10 * 60 * 1000;
 let polling = null;
 
-// Claude can take a minute; the menu may be closed and reopened meanwhile, so it asks for news.
+// Organising can take a minute; the menu may be closed and reopened meanwhile, so it asks for news.
 let wasBusy = false;
 let aiConnected = false;
 
@@ -39,9 +39,9 @@ function showOrganise(organise, opening = false) {
   const justFinished = wasBusy && !busy;
   wasBusy = busy;
   $("organise").disabled = busy || !aiConnected;
-  $("organise").textContent = busy ? "Claude is working…" : "Organise my tabs";
+  $("organise").textContent = busy ? "Organising…" : "Organise my tabs";
   if (busy) {
-    status("Claude is organising your tabs. This can take a minute, and you can close this menu.");
+    status("Organising your tabs. This can take a minute, and you can close this menu.");
     polling = polling || setInterval(refresh, 2000);
   } else {
     clearInterval(polling);
@@ -59,7 +59,7 @@ async function init() {
   const { connected, lists, organise } = await send({ cmd: "status" });
   aiConnected = connected;
   showOrganise(organise, true);
-  $("conn").textContent = connected ? "AI assistant connected" : "AI not connected";
+  $("conn").textContent = connected ? "AI connected" : "AI not connected";
   $("organise-note").hidden = !connected;
   $("setup-note").hidden = connected;
   $("lists").replaceChildren(...lists.map((name, index) => {

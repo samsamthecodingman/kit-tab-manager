@@ -21,7 +21,7 @@
   <div class="hero-text">
     <p class="eyebrow">Tab manager for Firefox &amp; friends</p>
     <h1>Hi, I'm Kit.</h1>
-    <p class="lede">I keep your tabs tidy in Firefox, LibreWolf, Floorp, Waterfox and Zen: on my own with your rules and one-click tidy-ups, or with Claude when you want something smarter.</p>
+    <p class="lede">I keep your tabs tidy in Firefox, LibreWolf, Floorp, Waterfox and Zen: on my own with your rules and one-click tidy-ups, or with your AI assistant when you want something smarter.</p>
     <div class="hero-actions">
       <button id="hero-organise" class="primary big">Organise my tabs</button>
       <button id="hero-hi" class="secondary big">Say hi</button>
@@ -53,13 +53,13 @@
   <section class="block connect" id="connect" hidden>
     <div class="block-head">
       <h2>Connect your AI assistant <span class="tag">Optional</span></h2>
-      <p>Kit's rules, lists and tidy-ups already work. To let Claude Code see your tabs and use <strong>Organise with Claude</strong>, run this once in a terminal on Linux or macOS:</p>
+      <p>Kit's rules, lists and tidy-ups already work. To let your AI assistant (Claude Code, Codex, Gemini CLI, Cursor and others) see your tabs, and to use <strong>Organise with AI</strong>, run this once in a terminal on Linux or macOS:</p>
     </div>
     <div class="card">
       <div class="cmd"><code id="install-cmd">curl -fsSL https://raw.githubusercontent.com/samsamthecodingman/kit-tab-manager/master/install.sh | sh</code><button id="copy-cmd" class="secondary">Copy</button></div>
       <ol class="steps">
         <li>Installs Kit's small companion app in your home folder. It needs <code>python3</code>, which most systems already have.</li>
-        <li>Connects it to your browser and, if you have it installed, to Claude Code.</li>
+        <li>Connects it to your browser and to the AI assistants it finds: Claude Code, Codex, Gemini CLI, Cursor, Windsurf and Claude Desktop.</li>
         <li>That's it: this section disappears by itself once Kit is connected.</li>
       </ol>
       <p class="waiting"><span class="pulse" aria-hidden="true"></span>Waiting for Kit's companion app…</p>
@@ -68,8 +68,8 @@
 
   <section class="block" id="organise">
     <div class="block-head">
-      <h2>Organise with Claude</h2>
-      <p>Claude looks at your tab titles and addresses and sorts them into sensible groups, keeping the groups you already have. It can group, move and rename, but never close a tab or read a page.</p>
+      <h2>Organise with AI</h2>
+      <p>The AI looks at your tab titles and addresses and sorts them into sensible groups, keeping the groups you already have. It can group, move and rename, but never close a tab or read a page. This button uses Claude Code; more assistants to come.</p>
     </div>
     <div class="card organise-card">
       <label for="instructions">Anything specific? <span class="muted">(optional)</span></label>
@@ -161,20 +161,20 @@
 
   <section class="block">
     <div class="block-head">
-      <h2>Ask Claude Code</h2>
-      <p>With Kit installed, Claude Code can see and manage your tabs. Try asking:</p>
+      <h2>Ask your AI assistant</h2>
+      <p>With Kit connected, Claude Code, Codex, Gemini CLI, Cursor and other MCP-compatible assistants can see and manage your tabs. Try asking:</p>
     </div>
     <div class="grid prompts">
       <figure class="card prompt"><blockquote>Group my trip-planning tabs and collapse the ones I'm not using.</blockquote><button class="copy secondary">Copy</button></figure>
       <figure class="card prompt"><blockquote>Which tab has the guesthouse list? Switch to it and summarise it.</blockquote><button class="copy secondary">Copy</button></figure>
       <figure class="card prompt"><blockquote>Close the duplicate GitHub tabs, but show me which ones first.</blockquote><button class="copy secondary">Copy</button></figure>
     </div>
-    <p class="tools muted small">Claude's tools: <code>list_tabs</code> <code>list_groups</code> <code>group_tabs</code> <code>ungroup_tabs</code> <code>update_group</code> <code>move_tabs</code> <code>activate_tab</code> <code>close_tabs</code> <code>read_tab</code></p>
+    <p class="tools muted small">Kit's tools for AI assistants: <code>list_tabs</code> <code>list_groups</code> <code>group_tabs</code> <code>ungroup_tabs</code> <code>update_group</code> <code>move_tabs</code> <code>activate_tab</code> <code>close_tabs</code> <code>read_tab</code></p>
   </section>
 </main>
 
 <footer class="foot">
-  <p>Kit never clicks, types or submits anything, and never sees private windows. Your tabs only reach Anthropic when you use Claude.</p>
+  <p>Kit never clicks, types or submits anything, and never sees private windows. Your tabs only leave your computer when you use an AI assistant.</p>
   <p class="muted">Kit is an independent project, not made by Anthropic or Mozilla. <span id="version"></span></p>
 </footer>
 

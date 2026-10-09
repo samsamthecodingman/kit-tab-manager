@@ -125,3 +125,38 @@ def test_mcp_tool_call_without_firefox():
         ])
     assert reply["result"]["isError"] is True
     assert "Firefox isn't connected" in reply["result"]["content"][0]["text"]
+
+
+def load_kit():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("kit", KIT)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_connecting_other_assistants_edits_configs_safely(tmp_path):
+    kit = load_kit()
+    entry = {"command": "/usr/bin/python3", "args": ["/kit.py", "mcp"]}
+    config = tmp_path / "settings.json"
+    config.write_text(json.dumps({"theme": "dark", "mcpServers": {"other": {"command": "x"}}}))
+
+    assert kit.update_config(config, entry) == "connected"
+    data = json.loads(config.read_text())
+    assert data["theme"] == "dark" and data["mcpServers"]["other"] == {"command": "x"}  # the rest is untouched
+    assert data["mcpServers"]["firefox-tabs"] == entry
+    assert json.loads((tmp_path / "settings.json.before-kit").read_text())["mcpServers"] == {"other": {"command": "x"}}
+
+    assert kit.update_config(config, entry) == "already connected"
+    assert kit.update_config(config, None) == "removed"
+    assert "firefox-tabs" not in json.loads(config.read_text())["mcpServers"]
+
+    fresh = tmp_path / "new" / "mcp.json"
+    fresh.parent.mkdir()
+    assert kit.update_config(fresh, entry) == "connected"
+    assert json.loads(fresh.read_text()) == {"mcpServers": {"firefox-tabs": entry}}
+
+    commented = tmp_path / "commented.json"
+    commented.write_text('{ // my settings\n "mcpServers": {} }')
+    assert kit.update_config(commented, entry).startswith("skipped")
+    assert commented.read_text() == '{ // my settings\n "mcpServers": {} }'

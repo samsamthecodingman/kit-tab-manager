@@ -8,8 +8,10 @@ One file, Python standard library only, two jobs:
                     JSON) and listens on a Unix socket that only this user can open.
   kit.py mcp        Your AI assistant (Claude Code, or any MCP client) starts it as an MCP server
                     over stdio. Each tool call goes through the socket to the extension.
+  kit.py register   Connects Kit to the other MCP assistants it finds (install.sh runs this);
+                    `kit.py unregister` disconnects them.
 
-The extension can also ask for "Organise with Claude": Kit runs Claude Code headless
+The extension can also ask for "Organise with AI": Kit runs Claude Code headless
 (claude -p) in an empty folder with no built-in tools and only the tab grouping tools (no
 closing, no page reading), then reports back when it is done.
 """
@@ -38,7 +40,7 @@ ORGANISE_TOOLS = ["list_tabs", "list_groups", "group_tabs", "ungroup_tabs", "upd
 GROUP_COLORS = ["blue", "cyan", "green", "yellow", "orange", "red", "pink", "purple", "grey"]
 
 ORGANISE_PROMPT = """Organise the user's Firefox tabs into tidy tab groups. The user pressed
-"Organise with Claude" in Kit's toolbar menu, so go ahead without asking questions.
+"Organise with AI" in Kit's toolbar menu, so go ahead without asking questions.
 
 - Start with list_tabs and list_groups, and work from titles and URLs.
 - Keep the user's existing groups (names and colours) wherever a tab fits one, and add tabs to
@@ -63,7 +65,7 @@ def find_program(name: str) -> str | None:
     return shutil.which(name, path=os.pathsep.join([os.environ.get("PATH", ""), *extra]))
 
 
-# ---- organise with Claude --------------------------------------------------------------------
+# ---- organise with AI (runs Claude Code) --------------------------------------------------------------------
 
 def organise_command(instructions: str) -> list[str]:
     claude = find_program("claude")
@@ -174,7 +176,7 @@ class Bridge:
         run_id = msg.get("run_id")
         if not self._organising.acquire(blocking=False):
             self._send_native({"event": "organise_done", "run_id": run_id, "ok": False,
-                               "summary": "Claude is already organising your tabs."})
+                               "summary": "Kit is already organising your tabs."})
             return
         try:
             ok, summary = run_claude(str(msg.get("instructions") or "")[:500])
@@ -347,10 +349,77 @@ def run_mcp() -> None:
             sys.stdout.flush()
 
 
+# ---- connecting AI assistants (used by install.sh) ---------------------------------------------
+
+MCP_NAME = "firefox-tabs"
+
+
+def assistant_configs() -> list[tuple[str, Path, Path]]:
+    """(assistant, folder that shows it's installed, its MCP config file). All use an "mcpServers" object."""
+    home = Path.home()
+    support = home / "Library" / "Application Support"
+    return [
+        ("Cursor", home / ".cursor", home / ".cursor" / "mcp.json"),
+        ("Gemini CLI", home / ".gemini", home / ".gemini" / "settings.json"),
+        ("Windsurf", home / ".codeium" / "windsurf", home / ".codeium" / "windsurf" / "mcp_config.json"),
+        ("Claude Desktop", support / "Claude", support / "Claude" / "claude_desktop_config.json"),
+        ("Claude Desktop", home / ".config" / "Claude", home / ".config" / "Claude" / "claude_desktop_config.json"),
+    ]
+
+
+def update_config(path: Path, entry: dict | None) -> str:
+    """Adds Kit's entry to an mcpServers config (or removes it, when entry is None) and says what happened.
+    Leaves files it can't read alone, and keeps a one-time backup of the original next to it."""
+    try:
+        data = json.loads(path.read_text()) if path.exists() and path.read_text().strip() else {}
+    except (OSError, ValueError):
+        return "skipped: couldn't read the file (it may contain comments); add Kit by hand"
+    if not isinstance(data, dict) or not isinstance(data.get("mcpServers", {}), dict):
+        return "skipped: the file isn't in the usual format; add Kit by hand"
+    servers = data.setdefault("mcpServers", {})
+    if entry is None:
+        if MCP_NAME not in servers:
+            return "nothing to remove"
+        del servers[MCP_NAME]
+    else:
+        if servers.get(MCP_NAME) == entry:
+            return "already connected"
+        servers[MCP_NAME] = entry
+    backup = path.with_name(path.name + ".before-kit")
+    if path.exists() and not backup.exists():
+        shutil.copy2(path, backup)
+    path.write_text(json.dumps(data, indent=2) + "\n")
+    return "removed" if entry is None else "connected"
+
+
+def register_assistants(python: str, remove: bool = False) -> None:
+    """Connects (or disconnects) Kit's MCP server to each MCP assistant found, except Claude Code,
+    which install.sh handles with `claude mcp add`."""
+    entry = None if remove else {"command": python, "args": [str(SELF), "mcp"]}
+    found = False
+    for name, marker, config in assistant_configs():
+        if marker.is_dir():
+            found = True
+            print(f"{name}: {update_config(config, entry)} ({config})")
+    codex = find_program("codex")
+    if codex:
+        found = True
+        subprocess.run([codex, "mcp", "remove", MCP_NAME], capture_output=True)
+        if not remove:
+            done = subprocess.run([codex, "mcp", "add", MCP_NAME, "--", python, str(SELF), "mcp"], capture_output=True)
+            print("Codex: " + ("connected" if done.returncode == 0 else "couldn't connect; add Kit by hand"))
+        else:
+            print("Codex: removed")
+    if not found and not remove:
+        print("No other MCP assistants found (Cursor, Gemini CLI, Codex, Windsurf, Claude Desktop).")
+
+
 def main() -> None:
     mode = sys.argv[1] if len(sys.argv) > 1 else ""
     if mode == "mcp":
         run_mcp()
+    elif mode in ("register", "unregister"):
+        register_assistants(sys.argv[2] if len(sys.argv) > 2 else sys.executable, remove=mode == "unregister")
     elif mode in ("--version", "version"):
         print(f"Kit {VERSION}")
     else:

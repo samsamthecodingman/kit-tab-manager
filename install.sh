@@ -60,6 +60,7 @@ if [ "${1:-}" = "--uninstall" ]; then
   step "Removing Kit's companion app"
   remove_manifest() { rm -f "$2/$HOST_NAME.json"; }
   for_each_browser_dir remove_manifest
+  if [ -f "$APP_DIR/kit.py" ]; then python3 "$APP_DIR/kit.py" unregister || true; fi
   rm -rf "$APP_DIR"
   if command -v claude >/dev/null 2>&1; then claude mcp remove "$MCP_NAME" -s user >/dev/null 2>&1 || true; fi
   say "Done. Remove the Kit extension itself from your browser's Add-ons page (about:addons)."
@@ -106,16 +107,16 @@ EOF
 }
 for_each_browser_dir write_manifest
 
-step "3/3  Connecting your AI assistant"
+step "3/3  Connecting your AI assistants"
 if command -v claude >/dev/null 2>&1; then
   claude mcp remove "$MCP_NAME" -s user >/dev/null 2>&1 || true # replaces any older Kit or Tab Bridge setup
   claude mcp add --scope user "$MCP_NAME" -- "$PYTHON" "$APP_DIR/kit.py" mcp >/dev/null
-  say "Connected to Claude Code. Start a new Claude Code session to use Kit's tab tools."
+  say "Claude Code: connected. Start a new session to use Kit's tab tools."
 else
-  say "Claude Code isn't installed, so this step was skipped. Kit's rules and tidy-ups work without it."
-  say "To add it later, install Claude Code (https://claude.com/claude-code) and run this again."
+  say "Claude Code: not installed. Kit's \"Organise with AI\" button uses it (https://claude.com/claude-code)."
 fi
-say "Other MCP-compatible assistants can use Kit too: point them at"
+"$PYTHON" "$APP_DIR/kit.py" register "$PYTHON"
+say "Any other MCP-compatible assistant can use Kit too: point it at"
 say "    $PYTHON \"$APP_DIR/kit.py\" mcp"
 
 step "All set."

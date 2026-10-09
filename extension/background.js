@@ -18,7 +18,7 @@ function connect() {
   port.postMessage({ type: "ping" }); // the app answers "pong"; if it isn't installed, the port just disconnects
   port.onMessage.addListener(async (msg) => {
     if (msg && msg.event === "pong") return setConnected(true);
-    if (msg && msg.event) return onHostEvent(msg); // e.g. "Organise with Claude" finished
+    if (msg && msg.event) return onHostEvent(msg); // e.g. "Organise with AI" finished
     const { id, method, params } = msg || {};
     const handler = Object.prototype.hasOwnProperty.call(HANDLERS, method) ? HANDLERS[method] : null;
     const animated = handler && ANIMATED.has(method);

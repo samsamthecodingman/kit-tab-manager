@@ -56,11 +56,11 @@ function showOrganise(organise) {
   const busy = organise.running;
   for (const b of [$("organise-btn"), $("hero-organise")]) {
     b.disabled = busy;
-    b.textContent = busy ? "Claude is working…" : "Organise my tabs";
+    b.textContent = busy ? "Organising…" : "Organise my tabs";
   }
   $("organise-btn").disabled = busy || !aiConnected;
   $("organise-note").textContent = busy
-    ? "Claude is organising your tabs. Kit narrates each change in the tab bar."
+    ? "Organising your tabs. Kit narrates each change in the tab bar."
     : aiConnected ? "Takes 20–60 seconds. You can keep browsing while Kit works."
     : "Connect Claude Code first: it's one command (see the top of this page).";
   if (busy) {
@@ -90,7 +90,7 @@ async function refreshStatus() {
   // While not connected, check every few seconds so the page updates by itself after setup.
   if (!connected && !connectPolling) connectPolling = setInterval(refreshStatus, 3000);
   if (connected && connectPolling) { clearInterval(connectPolling); connectPolling = null; }
-  if (justConnected) toast("Connected! Claude Code can now see your tabs.");
+  if (justConnected) toast("Connected! Your AI assistant can now see your tabs.");
   showOrganise(organise);
 }
 
@@ -179,7 +179,7 @@ const TIPS = [
   "Ask me to organise your tabs!",
   "One click tidies the lot",
   "Lists make great shortcuts",
-  "Claude Code can ask me about any tab",
+  "Your AI assistant can ask me about any tab",
 ];
 
 function startStage() {
@@ -272,7 +272,7 @@ $("organise-btn").addEventListener("click", organise);
 document.querySelectorAll(".prompt .copy").forEach((b) => b.addEventListener("click", async () => {
   try {
     await navigator.clipboard.writeText(b.parentElement.querySelector("blockquote").textContent);
-    toast("Copied. Paste it into Claude Code.");
+    toast("Copied. Paste it into your AI assistant.");
   } catch (e) {
     toast("Couldn't copy; select the text instead.", true);
   }
