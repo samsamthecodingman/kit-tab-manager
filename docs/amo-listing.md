@@ -18,7 +18,7 @@ Tidy your tabs with one-click rules and tidy-ups, and Kit, a pixel fox who walks
 
 ## Description
 
-Kit is a tab manager for Firefox, LibreWolf, Floorp, Waterfox and Zen. It tidies your tabs on its own, and connects to your AI assistant when you want something smarter: Claude Code today, with more assistants to come. Ask Claude to group your research tabs, find the tab with your notes, or summarise the page you have open, and it can.
+Kit is a tab manager for Firefox, LibreWolf, Floorp, Waterfox and Zen. It tidies your tabs on its own, and connects to your AI assistant when you want something smarter. Ask it to group your research tabs, find the tab with your notes, or summarise the page you have open, and it can.
 
 **What you get**
 

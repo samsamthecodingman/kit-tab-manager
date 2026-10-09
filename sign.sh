@@ -27,7 +27,10 @@ version=$(python3 -c 'import json; print(json.load(open("extension/manifest.json
 echo "Checking and submitting Kit $version ($channel). Mozilla won't sign the same version twice…"
 
 npx --yes web-ext@10 lint --source-dir extension
-npx --yes web-ext@10 sign --channel="$channel" --source-dir extension --artifacts-dir web-ext-artifacts
+# A listed version also needs its licence and listing details (from docs/amo-listing.md).
+metadata=()
+[[ $channel == listed ]] && metadata=(--amo-metadata docs/amo-metadata.json)
+npx --yes web-ext@10 sign --channel="$channel" --source-dir extension --artifacts-dir web-ext-artifacts "${metadata[@]}"
 
 echo
 if [[ $channel == listed ]]; then

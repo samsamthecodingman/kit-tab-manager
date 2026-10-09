@@ -35,4 +35,4 @@ jobs:
         env:
           WEB_EXT_API_KEY: ${{ secrets.WEB_EXT_API_KEY }}
           WEB_EXT_API_SECRET: ${{ secrets.WEB_EXT_API_SECRET }}
-        run: npx --yes web-ext@10 sign --channel=listed --source-dir extension --artifacts-dir web-ext-artifacts
+        run: npx --yes web-ext@10 sign --channel=listed --source-dir extension --artifacts-dir web-ext-artifacts --amo-metadata docs/amo-metadata.json
