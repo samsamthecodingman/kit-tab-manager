@@ -63,7 +63,7 @@ Let your AI assistant list, group, move, switch, close and read your tabs, or ti
 
 Kit is half Claude, half Firefox: a little Claude-orange creature in a Firefox-orange fox hoodie, complete with hood ears and a bushy tail. Whenever your tabs change, Kit walks in along the tab bar, stops to say what it's doing, then walks off, always facing the way it's going.
 
-Firefox doesn't let extensions draw on the tab bar or on built-in pages, so Kit is drawn as a temporary background on a copy of your current theme. That's why Kit shows up on every page, including `about:` pages and PDFs, why it hops rather than glides, and why your colours never change. If your system is set to reduce motion, Kit appears in place instead of walking.
+Firefox doesn't let extensions draw on the tab bar or on built-in pages, so Kit is drawn as a temporary background on a copy of your current theme. That's why Kit shows up on every page, including `about:` pages and PDFs, why it hops rather than glides, and why your colours never change. Kit estimates where your last tab ends and stands in the empty space after it; when your tabs fill the bar, it squeezes into the small gap by the window buttons and fades the tabs' text while it talks, so you can still read it. If your system is set to reduce motion, Kit appears in place instead of walking.
 
 ## Works in
 

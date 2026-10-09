@@ -30,7 +30,7 @@ import threading
 import time
 from pathlib import Path
 
-VERSION = "0.8.0"
+VERSION = "0.8.1"
 REQUEST_TIMEOUT = 60.0
 ORGANISE_TIMEOUT = 300.0
 ORGANISE_MODEL = "sonnet"

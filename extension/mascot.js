@@ -95,6 +95,54 @@ const TAB_BAR_FRAME_MS = 80;
 const TAB_BAR_HOP = 24; // px per visible hop; fewer distinct pictures means less flicker
 const TAB_BAR_OVERLAP_MS = 16; // how long a new picture sits over the previous one while it loads (about one screen refresh)
 const TAB_BAR_HOLD_MS = 1600; // each bubble stays up this long once Kit stands still
+const BUBBLE_FONT = "600 11px system-ui, sans-serif";
+const KIT_SPACE = KIT_W * 2 + 8; // Kit's width in the tab bar, plus the gap before its bubble
+const DIM = 0.25; // how much of the tabs' text shows while Kit talks over them
+
+// Extensions can't see where Firefox draws its tabs, so this estimates it from Firefox's own tab
+// sizes (tabs shrink from 225 to 76 px, then scroll) and the window: where the last tab ends,
+// where the buttons on the right start, and the empty 40 px gap Firefox keeps just before the
+// window's own buttons. Rough by design: it errs towards thinking the tabs are wider.
+const BAR = { tabMin: 76, tabMax: 225, pinned: 40, button: 36, spacer: 40, labelMax: 125, charW: 7 };
+async function tabBarLayout(windowId, width) {
+  const [win, tabs, groups, platform] = await Promise.all([
+    browser.windows.get(windowId),
+    browser.tabs.query({ windowId }),
+    browser.tabGroups.query({ windowId }).catch(() => []),
+    browser.runtime.getPlatformInfo(),
+  ]);
+  const mac = platform.os === "mac";
+  const controls = mac ? 0 : platform.os === "win" ? 138 : 115; // minimise, maximise, close
+  const left = (mac ? 76 + BAR.spacer : win.state === "normal" ? BAR.spacer : 0) + BAR.button; // window buttons or spacer, then Firefox View
+  const right = controls + BAR.spacer + 3 * BAR.button; // list all tabs and the other buttons at the end of the bar
+  const byId = new Map(groups.map((g) => [g.id, g]));
+  const labelled = new Set();
+  let fixed = 0, flexible = 0;
+  for (const t of tabs) {
+    if (t.hidden) continue;
+    if (t.pinned) { fixed += BAR.pinned; continue; }
+    const g = byId.get(t.groupId);
+    if (g && !labelled.has(g.id)) {
+      labelled.add(g.id);
+      fixed += (g.title ? Math.min(BAR.labelMax, g.title.length * BAR.charW) + 8 : 22) + 6;
+    }
+    if (g && g.collapsed && !t.active) continue; // a collapsed group shows only its label (and the current tab)
+    flexible++;
+  }
+  const room = width - left - right - BAR.button; // the new tab button follows the last tab
+  const tabWidth = flexible ? Math.min(BAR.tabMax, Math.max(BAR.tabMin, (room - fixed) / flexible)) : 0;
+  return {
+    start: left + Math.min(room, fixed + flexible * tabWidth) + BAR.button + 8, // first free spot after the tabs
+    end: width - right, // the buttons on the right start here
+    gap: width - controls - BAR.spacer + 3, // Kit (34 px) fits in the 40 px gap before the window buttons
+  };
+}
+
+function bubbleWidth(text) {
+  const ctx = bubbleWidth.ctx || (bubbleWidth.ctx = document.createElement("canvas").getContext("2d"));
+  ctx.font = BUBBLE_FONT;
+  return Math.ceil(ctx.measureText(text).width) + 16;
+}
 const TabBarKit = {
   active: false,
   x: 0,
@@ -110,6 +158,9 @@ const TabBarKit = {
   cache: new Map(),
   waiters: [],
   facingLeft: true,
+  layout: null,
+  squeezed: false, // no room after the tabs: Kit stands in the gap by the window buttons and talks over the tabs
+  dim: false,
 
   // Resolves once Kit has stopped walking (or has been stopped).
   whenStill() {
@@ -129,15 +180,33 @@ const TabBarKit = {
     this.text = text;
     this.done = false;
     if (!this.active) this.x = this.width + 20;
-    this.target = Math.max(this.width / 2, this.width - 400); // well along the bar, in from the buttons on the right
+    await this.place(windowId);
     if (this.leaving) { const done = this.leaving; this.leaving = null; this.onArrive = null; done(); } // turn back
     this.active = true;
     this.run();
   },
 
+  // Where Kit stands: well along the bar, after the last tab, with room for its bubble before the
+  // buttons on the right. If the tabs fill the bar, in the gap just before the window buttons.
+  async place(windowId) {
+    this.windowId = windowId;
+    try {
+      this.layout = await tabBarLayout(windowId, this.width);
+    } catch (e) {
+      this.layout = null;
+    }
+    const ideal = Math.max(this.width / 2, this.width - 400);
+    const l = this.layout;
+    if (!l) { this.squeezed = false; this.target = ideal; return; }
+    const lastSpot = l.end - KIT_SPACE - Math.max(bubbleWidth(this.text), 190); // 190: room for the longer lines that follow
+    this.squeezed = lastSpot < l.start;
+    this.target = this.squeezed ? l.gap : Math.max(l.start, Math.min(ideal, lastSpot));
+  },
+
   say(text, done) {
     this.text = text;
     this.done = done;
+    if (this.active && !this.leaving) this.place(this.windowId); // tabs may have moved since Kit arrived
   },
 
   leave() {
@@ -176,13 +245,16 @@ const TabBarKit = {
       // Firefox blanks a new picture until it has loaded, so only send one when it differs from
       // the one showing, and layer it over the previous picture just long enough to load
       // (TAB_BAR_OVERLAP_MS), so there's always a Kit on screen without a visible double image.
-      const url = this.frameUrl(moving && !reduce);
+      const walking = moving && !reduce;
+      const url = this.frameUrl(walking);
       if (url !== this.shown) {
         const previous = this.shown;
-        Mascot.applyTheme(previous ? [url, previous] : [url]);
+        // Squeezed in by the window buttons, Kit's bubble sits behind the last tabs, so their text fades while it shows.
+        const dim = (this.dim = this.squeezed && !walking && !!this.text);
+        Mascot.applyTheme(previous ? [url, previous] : [url], dim);
         this.shown = url;
         clearTimeout(this.overlapTimer);
-        if (previous) this.overlapTimer = setTimeout(() => this.shown === url && Mascot.applyTheme([url]), TAB_BAR_OVERLAP_MS);
+        if (previous) this.overlapTimer = setTimeout(() => this.shown === url && Mascot.applyTheme([url], dim), TAB_BAR_OVERLAP_MS);
       }
       if (!moving) this.flushWaiters();
       if (!moving && this.onArrive) this.onArrive();
@@ -192,10 +264,11 @@ const TabBarKit = {
   // Kit moves in TAB_BAR_HOP px hops and its step follows its position, so each spot always
   // has the same picture; pictures are kept and reused, so later runs don't re-draw them.
   frameUrl(walking) {
-    const x = Math.round(this.x / TAB_BAR_HOP) * TAB_BAR_HOP;
+    // Standing, Kit is exactly where it stopped, so it fits the gap by the window buttons.
+    const x = walking ? Math.round(this.x / TAB_BAR_HOP) * TAB_BAR_HOP : Math.round(this.x);
     const pose = !walking ? "stand" : (x / TAB_BAR_HOP) % 2 !== 0 ? "b" : "a";
     const text = walking ? "" : this.text; // the bubble only shows once Kit stands still
-    const key = [this.width, x, pose, this.facingLeft, text, this.done].join("|");
+    const key = [this.width, x, pose, this.facingLeft, text, this.done, this.squeezed].join("|");
     let url = this.cache.get(key);
     if (!url) {
       url = this.render(x, pose, text, this.facingLeft);
@@ -215,9 +288,10 @@ const TabBarKit = {
     for (const [dx, dy] of [[-2, 0], [2, 0], [0, -2], [0, 2]]) drawKit(ctx, sx + dx, sy + dy, 2, pose, facingLeft, INK);
     drawKit(ctx, sx, sy, 2, pose, facingLeft);
     if (text) {
-      ctx.font = "600 11px system-ui, sans-serif";
-      const w = Math.ceil(ctx.measureText(text).width) + 16;
-      const bx = x + KIT_W * 2 + 8, by = 11; // to the right of Kit, away from the tabs on the left
+      ctx.font = BUBBLE_FONT;
+      const w = bubbleWidth(text);
+      // To Kit's right, away from the tabs; squeezed in by the window buttons, to its left instead.
+      const bx = this.squeezed ? Math.max(0, x - 8 - w) : x + KIT_SPACE, by = 11;
       ctx.fillStyle = this.done ? "#E8833A" : "#FAECE7"; // "Done" in Kit's hoodie orange
       ctx.strokeStyle = this.done ? "#B8602A" : "#F0997B";
       ctx.beginPath();
@@ -329,9 +403,10 @@ const Mascot = {
 
   // The copied theme plus Kit's frame picture(s), placed in front of any backgrounds it had.
   // frameUrls: newest first; each is a window-wide transparent picture.
-  applyTheme(frameUrls) {
+  // dim: fade the tabs' text and the selected tab, so Kit's bubble shows through them.
+  applyTheme(frameUrls, dim = false) {
     if (!this.themed || !this.theme || this.windowId === null) return;
-    const t = this.theme;
+    const t = dim ? { ...this.theme, colors: this.dimmed() } : this.theme;
     const images = { ...(t.images || {}) };
     const props = { ...t.properties };
     const list = (v) => (Array.isArray(v) ? v : []);
@@ -339,6 +414,16 @@ const Mascot = {
     props.additional_backgrounds_alignment = [...frameUrls.map(() => "left top"), ...list(props.additional_backgrounds_alignment)];
     props.additional_backgrounds_tiling = [...frameUrls.map(() => "no-repeat"), ...list(props.additional_backgrounds_tiling)];
     browser.theme.update(this.windowId, { ...t, images, properties: props }).catch(() => {});
+  },
+
+  dimmed() {
+    const colors = { ...this.theme.colors };
+    const base = BASE_PALETTE[this.theme.properties.color_scheme] || BASE_PALETTE.light;
+    for (const key of ["tab_background_text", "tab_text", "tab_selected"]) {
+      const c = parseColor(colors[key] ?? base[key]);
+      if (c) colors[key] = `rgba(${c.join(", ")}, ${DIM})`;
+    }
+    return colors;
   },
 
   restoreTheme() {
