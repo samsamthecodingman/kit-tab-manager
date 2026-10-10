@@ -2,6 +2,16 @@
 
 Copy these into the Developer Hub (**Edit Product Page**, and **Upload New Version** for the release notes and reviewer notes). Screenshots (1280×800, in order) are in [`docs/amo/`](amo).
 
+## Screenshots
+
+Upload in this order (1280×800, in [`docs/amo/`](amo)), with these captions:
+
+1. `1-kit.png`: Kit walks along your tab bar and says what's changing, on every page.
+2. `2-menu.png`: Organise with AI in one click, then see exactly which groups it made.
+3. `3-settings.png`: Your own grouping rules, and lists that chain steps into one button.
+4. `4-full-page.png`: Kit's full page explains every feature, with live counts of your tabs.
+5. `5-assistants.png`: Works with Claude Code, Codex, Hermes Agent, Gemini CLI, Cursor and other MCP apps.
+
 ## Name
 
 Kit: Tab Manager
