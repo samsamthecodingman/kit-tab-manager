@@ -197,10 +197,18 @@ async function agentList(refresh = false) {
   return Agents.list || [];
 }
 
+// Connected, can organise, and not known to be signed out (null: Kit can't tell, so let it try).
+function canOrganiseNow(a) {
+  return a.connected && a.can_organise && a.signed_in !== false;
+}
+
 async function chosenAgent(requested) {
-  const usable = (await agentList()).filter((a) => a.connected && a.can_organise);
+  const list = await agentList();
+  const usable = list.filter(canOrganiseNow);
   const saved = requested || (await browser.storage.local.get("organiseAgent")).organiseAgent;
   if (saved && usable.some((a) => a.id === saved)) return saved;
+  const unsigned = list.find((a) => a.id === saved && a.connected && a.signed_in === false);
+  if (unsigned) throw new Error(`${unsigned.name} isn't signed in yet. Open Kit's full page and press Sign in.`);
   if (usable.length === 1) return usable[0].id;
   if (!usable.length) throw new Error("Connect Claude Code, Codex or Hermes Agent to use Organise with AI: see Kit's full page.");
   throw new Error("Choose which assistant should organise your tabs.");
@@ -372,8 +380,10 @@ browser.runtime.onMessage.addListener(async (msg) => {
     case "choose_agent":
       await browser.storage.local.set({ organiseAgent: msg.id });
       return true;
-    case "connect_agent": {
-      const reply = await askHost("connect_agent", { id: msg.id });
+    case "connect_agent":
+    case "sign_in": {
+      // Signing in waits for you to finish in the browser, so it gets longer than other requests.
+      const reply = await askHost(msg.cmd, { id: msg.id }, msg.cmd === "sign_in" ? 11 * 60 * 1000 : 150000);
       if (!reply) throw new Error("Kit's companion app isn't running.");
       if (Array.isArray(reply.agents)) { Agents.list = reply.agents; Agents.at = Date.now(); }
       if (!reply.result.ok) throw new Error(reply.result.message);

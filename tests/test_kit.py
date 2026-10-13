@@ -189,3 +189,27 @@ def test_agents_status_in_an_empty_home(tmp_path, monkeypatch):
     ok, message = kit.connect_agent(kit.AGENTS_BY_ID["cursor"], "/usr/bin/python3")
     assert ok and message.startswith("connected")
     assert {a["id"]: a for a in kit.agents_status()}["cursor"]["connected"]
+
+
+def test_sign_in_status_and_sign_in(tmp_path, monkeypatch):
+    # A stand-in Claude Code that starts signed out and signs in when asked.
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    flag = tmp_path / "signed-in"
+    fake = bin_dir / "claude"
+    fake.write_text(f"""#!/bin/sh
+case "$1 $2" in
+  "auth status") [ -f {flag} ] && echo '{{"loggedIn": true}}' || echo '{{"loggedIn": false}}';;
+  "auth login") touch {flag};;
+esac
+""")
+    fake.chmod(0o755)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    kit = load_kit()
+    monkeypatch.setattr(kit, "find_program", lambda name: str(fake) if name == "claude" else None)
+    claude = kit.AGENTS_BY_ID["claude"]
+    assert kit.signed_in(claude) is False
+    assert {a["id"]: a for a in kit.agents_status()}["claude"]["can_sign_in"]
+    assert kit.sign_in(claude) == (True, "Signed in to Claude Code.")
+    assert kit.signed_in(claude) is True
+    assert kit.signed_in(kit.AGENTS_BY_ID["cursor"]) is None  # Kit can't tell for apps

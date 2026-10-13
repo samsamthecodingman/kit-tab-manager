@@ -171,7 +171,8 @@ To try the extension from the code, open `about:debugging` → **This Firefox** 
 | Menu says **AI not connected** | That's expected if you haven't run the setup command; Kit's other features still work. If you have, run it again, then reload the extension from `about:addons`. |
 | Your AI assistant says **Firefox isn't connected** | Make sure Firefox is open and the extension is loaded (a temporary add-on disappears on restart). |
 | A tab can't be read | Firefox doesn't let extensions read built-in pages (`about:`, the PDF viewer, addons.mozilla.org). |
-| Organise with AI fails | Check `~/.local/share/tab-bridge/organise.log`; the `detail` field has Claude's error output. |
+| Organise says your assistant **isn't signed in** (or Claude Code says "Please run /login") | Open Kit's full page and press **Sign in** next to the assistant; your browser opens its sign-in page. Signing in to the Claude *app* doesn't sign in Claude Code: they sign in separately. |
+| Organise with AI fails | Check `~/.local/share/tab-bridge/organise.log`; the `detail` field has the assistant's error output. |
 
 ## Development
 

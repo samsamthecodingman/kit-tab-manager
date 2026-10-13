@@ -26,15 +26,21 @@
 
 <section>
   <h2>Organise with AI</h2>
-  <div class="agent-row">
-    <label for="agent">With</label>
-    <select id="agent" disabled><option value="">Checking assistants…</option></select>
+  <div id="organise-controls">
+    <div class="agent-row">
+      <label for="agent">With</label>
+      <select id="agent" disabled><option value="">Checking assistants…</option></select>
+    </div>
+    <textarea id="instructions" rows="2" maxlength="500" placeholder="Anything specific? (optional)" aria-label="Anything specific for the AI (optional)"></textarea>
+    <button id="organise" class="primary">Organise my tabs</button>
+    <p id="organise-note" class="muted small">It can group, move and rename, but can't close tabs.</p>
   </div>
-  <textarea id="instructions" rows="2" maxlength="500" placeholder="Anything specific? (optional)" aria-label="Anything specific for the AI (optional)"></textarea>
-  <button id="organise" class="primary">Organise my tabs</button>
-  <p id="organise-note" class="muted small">It can group, move and rename, but can't close tabs.</p>
+  <div id="setup-card" class="setup-card" hidden>
+    <p class="setup-title" id="setup-title">Let AI organise your tabs</p>
+    <p class="setup-text" id="setup-text">Kit's tidy-ups below already work. AI needs a one-time setup: paste one line, takes about a minute.</p>
+    <button id="setup" class="primary">Set up AI</button>
+  </div>
   <div id="result" role="status" hidden></div>
-  <p id="setup-note" class="small setup" hidden><span id="setup-text">Needs Kit's companion app.</span> <button id="setup" class="link inline">Set up (one command)</button></p>
 </section>
 
 <section>

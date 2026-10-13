@@ -225,3 +225,8 @@ const HANDLERS = {
 };
 
 connect();
+
+// Straight after installing, show Kit's full page, so the AI setup (optional) is easy to find.
+browser.runtime.onInstalled.addListener(({ reason, temporary }) => {
+  if (reason === "install" && !temporary) browser.tabs.create({ url: browser.runtime.getURL("home.html#welcome") });
+});

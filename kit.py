@@ -33,7 +33,7 @@ import threading
 import time
 from pathlib import Path
 
-VERSION = "0.8.2"
+VERSION = "0.9.0"
 REQUEST_TIMEOUT = 60.0
 ORGANISE_TIMEOUT = 300.0
 ORGANISE_MODEL = "sonnet"
@@ -84,6 +84,9 @@ def organise_prompt(instructions: str) -> str:
     return ORGANISE_PROMPT.format(extra=extra)
 
 
+SIGN_IN_TIMEOUT = 600  # long enough to type a password and approve in the browser
+
+
 def run_in_own_group(cmd: list, cwd: Path, timeout: float) -> subprocess.CompletedProcess:
     """Runs cmd in its own process group, so a timeout also stops anything it started."""
     proc = subprocess.Popen(cmd, cwd=cwd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -125,6 +128,8 @@ def run_organise(agent_id: str, instructions: str, prompt: str | None = None) ->
         if not ok:
             detail = (proc.stdout[-1000:] + "\n" + detail).strip()
         summary = summary or (f"{name} finished without a summary." if ok else f"{name} stopped with exit code {proc.returncode}.")
+        if not ok and re.search(r"/login|not logged in|log ?in|sign ?in|authenticat|api key", f"{summary}\n{detail}", re.I):
+            summary = f"{name} isn't signed in. Open Kit's full page and press Sign in next to {name}."
     with (DATA_DIR / "organise.log").open("a") as log:
         log.write(json.dumps({"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), "agent": agent_id, "ok": ok,
                               "instructions": instructions, "summary": summary, "detail": detail}) + "\n")
@@ -169,7 +174,7 @@ class Bridge:
                 if msg.get("type") == "organise":
                     threading.Thread(target=self.organise, args=(msg,), daemon=True).start()
                     continue
-                if msg.get("type") in ("agents", "connect_agent"):
+                if msg.get("type") in ("agents", "connect_agent", "sign_in"):
                     threading.Thread(target=self.agents, args=(msg,), daemon=True).start()
                     continue
                 with self._pending_lock:
@@ -219,9 +224,10 @@ class Bridge:
         """Lists the assistants (and connects one first, for "connect_agent")."""
         result, agents = None, None  # None: couldn't check, so the extension keeps what it knew
         try:
-            if msg.get("type") == "connect_agent":
+            if msg.get("type") in ("connect_agent", "sign_in"):
                 agent = AGENTS_BY_ID.get(str(msg.get("id")))
-                ok, message = connect_agent(agent, sys.executable) if agent else (False, "unknown assistant")
+                act = connect_agent if msg.get("type") == "connect_agent" else (lambda a, _python: sign_in(a))
+                ok, message = act(agent, sys.executable) if agent else (False, "unknown assistant")
                 result = {"id": msg.get("id"), "ok": ok, "message": message}
             agents = agents_status()
         except Exception as exc:  # always answer, so the page doesn't wait for a reply that never comes
@@ -564,9 +570,9 @@ def claude_connected() -> bool:
         return False
 
 
-def json_agent(agent_id: str, name: str, marker: Path, config: Path) -> dict:
+def json_agent(agent_id: str, name: str, marker: Path, config: Path, sign_in_help: str = "") -> dict:
     return {
-        "id": agent_id, "name": name,
+        "id": agent_id, "name": name, "sign_in_help": sign_in_help,
         "installed": marker.is_dir,
         "connected": lambda: json_config_connected(config),
         "connect": lambda python, remove: (lambda r: (not r.startswith("skipped"), f"{r} ({config})"))(
@@ -574,13 +580,34 @@ def json_agent(agent_id: str, name: str, marker: Path, config: Path) -> dict:
     }
 
 
+# Signing in. Kit checks from its own process, which runs where Organise runs, so "signed in" here
+# means Organise will work. Claude Code and Codex sign in through the browser (a local callback, no
+# terminal needed); the others only get instructions.
+def claude_signed_in():
+    out = run_cli([find_program("claude"), "auth", "status", "--json"]).stdout
+    try:
+        return bool(json.loads(out).get("loggedIn"))
+    except ValueError:
+        return None
+
+
+def codex_signed_in():
+    proc = run_cli([find_program("codex"), "login", "status"])
+    text = proc.stdout + proc.stderr
+    if "Not logged in" in text:
+        return False
+    return True if proc.returncode == 0 and "Logged in" in text else None
+
+
 def build_agents() -> list[dict]:
     home, support = Path.home(), Path.home() / "Library" / "Application Support"
     desktop = support / "Claude" if sys.platform == "darwin" else home / ".config" / "Claude"
     return [
         {"id": "claude", "name": "Claude Code", "program": "claude", "organise": claude_organise,
-         "installed": lambda: bool(find_program("claude")), "connected": claude_connected, "connect": claude_connect},
+         "installed": lambda: bool(find_program("claude")), "connected": claude_connected, "connect": claude_connect,
+         "signed_in": claude_signed_in, "sign_in": ["auth", "login"]},
         {"id": "codex", "name": "Codex", "program": "codex", "organise": codex_organise,
+         "signed_in": codex_signed_in, "sign_in": ["login"],
          "installed": lambda: bool(find_program("codex")), "connected": lambda: cli_connected("codex", MCP_NAME),
          "connect": lambda python, remove: cli_connect("codex", [(MCP_NAME, ["--", *mcp_entry(python)])], remove)},
         {"id": "hermes", "name": "Hermes Agent", "program": "hermes", "organise": hermes_organise,
@@ -589,11 +616,15 @@ def build_agents() -> list[dict]:
          "connect": lambda python, remove: cli_connect("hermes", [
              (MCP_NAME, ["--command", python, "--args", *mcp_entry(python)[1:]]),
              (ORGANISE_MCP_NAME, ["--command", python, "--args", *mcp_entry(python, True)[1:]])], remove),
-         "note": "type /reload-mcp in an open Hermes session"},
-        json_agent("gemini", "Gemini CLI", home / ".gemini", home / ".gemini" / "settings.json"),
-        json_agent("cursor", "Cursor", home / ".cursor", home / ".cursor" / "mcp.json"),
-        json_agent("windsurf", "Windsurf", home / ".codeium" / "windsurf", home / ".codeium" / "windsurf" / "mcp_config.json"),
-        json_agent("claude-desktop", "Claude Desktop", desktop, desktop / "claude_desktop_config.json"),
+         "note": "type /reload-mcp in an open Hermes session",
+         "sign_in_help": "To choose the AI model Hermes uses, run hermes setup in a terminal."},
+        json_agent("gemini", "Gemini CLI", home / ".gemini", home / ".gemini" / "settings.json",
+                   "If you haven't yet, run gemini in a terminal once and choose how to sign in."),
+        json_agent("cursor", "Cursor", home / ".cursor", home / ".cursor" / "mcp.json", "Sign in inside Cursor."),
+        json_agent("windsurf", "Windsurf", home / ".codeium" / "windsurf", home / ".codeium" / "windsurf" / "mcp_config.json",
+                   "Sign in inside Windsurf."),
+        json_agent("claude-desktop", "Claude Desktop", desktop, desktop / "claude_desktop_config.json",
+                   "Sign in inside the Claude app. (This doesn't sign in Claude Code, which has its own sign-in.)"),
     ]
 
 
@@ -613,19 +644,66 @@ def connect_agent(agent: dict, python: str, remove: bool = False) -> tuple[bool,
     return ok, message
 
 
+def signed_in(agent: dict):
+    """True or False when Kit can tell, None when it can't."""
+    check = agent.get("signed_in")
+    if not check:
+        return None
+    try:
+        return check()
+    except (OSError, subprocess.TimeoutExpired, ValueError, TypeError):
+        return None
+
+
 def agents_status() -> list[dict]:
-    """What the extension shows: every assistant Kit knows, whether it's installed and connected,
-    and whether it can run "Organise with AI"."""
+    """What the extension shows: every assistant Kit knows, whether it's installed, connected and
+    signed in, and whether it can run "Organise with AI"."""
     out = []
     for a in AGENTS:
         installed = a["installed"]()
         out.append({"id": a["id"], "name": a["name"], "installed": installed,
-                    "connected": installed and a["connected"](), "can_organise": bool(a.get("organise"))})
+                    "connected": installed and a["connected"](), "can_organise": bool(a.get("organise")),
+                    "signed_in": signed_in(a) if installed else None, "can_sign_in": bool(a.get("sign_in")),
+                    "sign_in_help": a.get("sign_in_help", "")})
     return out
 
 
+def sign_in(agent: dict, interactive: bool = False) -> tuple[bool, str]:
+    """Runs the assistant's own sign-in, which opens the browser. From the extension it runs with no
+    terminal and finishes through the browser; from the installer it can use the terminal too."""
+    program = find_program(agent.get("program", ""))
+    if not agent.get("sign_in") or not program:
+        return False, agent.get("sign_in_help") or f"Sign in to {agent['name']} in the app itself."
+    cmd = [program, *agent["sign_in"]]
+    try:
+        if interactive:
+            subprocess.run(cmd, timeout=SIGN_IN_TIMEOUT)
+        else:
+            run_in_own_group(cmd, Path.home(), SIGN_IN_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        return False, "Signing in took too long. Try again, and finish in the browser tab that opens."
+    except OSError as exc:
+        return False, f"Couldn't start {agent['name']}'s sign-in: {exc}"
+    if signed_in(agent):
+        return True, f"Signed in to {agent['name']}."
+    return False, f"{agent['name']} still isn't signed in. Try again, and finish in the browser tab that opens."
+
+
+def ask(question: str):
+    """A yes/no question in the terminal, even when this script's input is a pipe (curl | sh).
+    None when there's no terminal to ask in."""
+    try:
+        with open("/dev/tty", "r+") as tty:
+            tty.write(f"{question} [Y/n] ")
+            tty.flush()
+            return tty.readline().strip().lower() in ("", "y", "yes")
+    except OSError:
+        return None
+
+
 def register_assistants(python: str, remove: bool = False) -> None:
-    """install.sh: connects (or disconnects) every installed assistant."""
+    """install.sh: connects (or disconnects) every installed assistant, then offers to sign in to
+    any that need it, so setup ends with everything ready."""
     found = False
     for agent in AGENTS:
         if agent["installed"]():
@@ -633,6 +711,17 @@ def register_assistants(python: str, remove: bool = False) -> None:
             print(f"{agent['name']}: {connect_agent(agent, python, remove)[1]}")
     if not found and not remove:
         print("No AI assistants found (Claude Code, Codex, Hermes Agent, Gemini CLI, Cursor, Windsurf, Claude Desktop).")
+    if remove:
+        return
+    for agent in AGENTS:
+        if not agent["installed"]() or not agent.get("sign_in") or signed_in(agent) is not False:
+            continue
+        print(f"\n{agent['name']} is connected, but isn't signed in yet, so it can't organise your tabs.")
+        answer = ask(f"Sign in to {agent['name']} now? It opens your browser.")
+        if answer:
+            print(sign_in(agent, interactive=True)[1])
+        else:
+            print(f"{'No problem: you' if answer is False else 'You'} can sign in from Kit's full page: AI assistants, then Sign in.")
 
 
 def main() -> None:

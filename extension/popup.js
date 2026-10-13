@@ -59,8 +59,25 @@ function dismissResult() {
 }
 
 // The picker lists only connected assistants that can organise; there's no default beyond your last choice.
+// What to set up before Organise works: the companion app, an assistant, or a sign-in.
+function showSetup(step) {
+  const steps = {
+    app: ["Let AI organise your tabs", "Kit's tidy-ups below already work. AI needs a one-time setup: paste one line, takes about a minute.", "Set up AI", "home.html#connect"],
+    connect: ["Connect an AI assistant", "Kit is set up. Connect Claude Code, Codex or Hermes Agent to organise your tabs.", "Connect one", "home.html#assistants"],
+    signin: ["Sign in to organise", "Your AI assistant is connected but not signed in. Signing in takes a minute in your browser.", "Sign in", "home.html#assistants"],
+  };
+  $("organise-controls").hidden = !!step;
+  $("setup-card").hidden = !step;
+  if (!step) return;
+  const [title, text, button, page] = steps[step];
+  $("setup-title").textContent = title;
+  $("setup-text").textContent = text;
+  $("setup").textContent = button;
+  $("setup").dataset.page = page;
+}
+
 function showAgents({ agents, chosen }) {
-  const usable = agents.filter((a) => a.connected && a.can_organise);
+  const usable = agents.filter((a) => a.connected && a.can_organise && a.signed_in !== false);
   const select = $("agent");
   const options = usable.map((a) => Object.assign(document.createElement("option"), { value: a.id, textContent: a.name }));
   const pick = usable.some((a) => a.id === chosen) ? chosen : usable.length === 1 ? usable[0].id : "";
@@ -71,10 +88,8 @@ function showAgents({ agents, chosen }) {
   select.disabled = usable.length === 0;
   canOrganise = !!pick;
   $("organise").disabled = !canOrganise || wasBusy;
-  $("organise-note").hidden = usable.length === 0;
-  $("setup-note").hidden = usable.length > 0;
-  $("setup-text").textContent = "Connect Claude Code, Codex or Hermes Agent to use this.";
-  $("setup").textContent = "Connect one";
+  const needsSignIn = agents.some((a) => a.connected && a.can_organise && a.signed_in === false);
+  showSetup(usable.length ? null : needsSignIn ? "signin" : "connect");
 }
 
 $("agent").addEventListener("change", (e) => {
@@ -93,8 +108,7 @@ async function init() {
   aiConnected = connected;
   showOrganise(organise, true);
   $("conn").textContent = connected ? "AI connected" : "AI not connected";
-  $("organise-note").hidden = !connected;
-  $("setup-note").hidden = connected;
+  showSetup(connected ? null : "app");
   $("lists").replaceChildren(...lists.map((name, index) => {
     const b = document.createElement("button");
     b.textContent = name;
@@ -153,7 +167,7 @@ $("kit-hi").addEventListener("click", sayHi);
 const openHome = () => { browser.tabs.create({ url: browser.runtime.getURL("home.html") }); window.close(); };
 $("expand").addEventListener("click", openHome);
 $("setup").addEventListener("click", () => {
-  browser.tabs.create({ url: browser.runtime.getURL(aiConnected ? "home.html#assistants" : "home.html#connect") });
+  browser.tabs.create({ url: browser.runtime.getURL($("setup").dataset.page || "home.html#connect") });
   window.close();
 });
 $("expand-foot").addEventListener("click", openHome);

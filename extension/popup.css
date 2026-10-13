@@ -31,7 +31,9 @@ textarea { display: block; width: 100%; font: inherit; color: inherit; backgroun
   border-radius: 6px; padding: 6px 8px; margin-bottom: 6px; resize: vertical; }
 textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .small { font-size: 11px; margin-top: 4px; }
-.setup { margin: 6px 0 0; color: var(--muted); }
+.setup-card { padding: 10px 12px; border: 1px solid var(--accent); border-radius: 8px; background: var(--accent-soft); }
+.setup-title { margin: 0 0 2px; font-weight: 600; }
+.setup-text { margin: 0 0 8px; color: var(--fg); font-size: 12px; }
 button.link.inline { padding: 0; font-size: inherit; }
 .row { display: flex; gap: 6px; margin-top: 6px; }
 .row button { text-align: center; border: 1px solid var(--line); }

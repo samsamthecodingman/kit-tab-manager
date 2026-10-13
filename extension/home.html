@@ -54,17 +54,20 @@
 <main>
   <section class="block connect" id="connect" hidden>
     <div class="block-head">
-      <h2>Connect your AI assistant <span class="tag">Optional</span></h2>
-      <p>Kit's rules, lists and tidy-ups already work. To let your AI assistant (Claude Code, Codex, Gemini CLI, Cursor and others) see your tabs, and to use <strong>Organise with AI</strong>, run this once in a terminal on Linux or macOS:</p>
+      <h2>Set up AI <span class="tag">About a minute</span></h2>
+      <p>Kit's rules, lists and tidy-ups already work without this. To let AI organise your tabs, Kit needs a small helper app on your computer. You install it by pasting one line into the Terminal app:</p>
     </div>
     <div class="card">
-      <div class="cmd"><code id="install-cmd">curl -fsSL https://raw.githubusercontent.com/samsamthecodingman/kit-tab-manager/master/install.sh | sh</code><button id="copy-cmd" class="secondary">Copy</button></div>
-      <ol class="steps">
-        <li>Installs Kit's small companion app in your home folder. It needs <code>python3</code>, which most systems already have.</li>
-        <li>Connects it to your browser and to the AI assistants it finds: Claude Code, Codex, Gemini CLI, Hermes Agent, Cursor, Windsurf and Claude Desktop.</li>
-        <li>That's it: this section disappears by itself once Kit is connected.</li>
+      <ol class="setup-steps">
+        <li><strong>Open Terminal.</strong> <span id="terminal-how">On a Mac, press ⌘ and Space, type <em>Terminal</em> and press Return. On Linux, press Ctrl, Alt and T together.</span></li>
+        <li><strong>Copy this line</strong>, then paste it into Terminal and press Enter:
+          <div class="cmd"><code id="install-cmd">curl -fsSL https://raw.githubusercontent.com/samsamthecodingman/kit-tab-manager/master/install.sh | sh</code><button id="copy-cmd" class="primary">Copy</button></div>
+        </li>
+        <li><strong>Answer its questions.</strong> If your AI assistant isn't signed in yet, it offers to sign you in: press Enter, sign in on the page that opens in your browser, then come back.</li>
+        <li><strong>Come back here.</strong> This page notices by itself when Kit is connected.</li>
       </ol>
-      <p class="waiting"><span class="pulse" aria-hidden="true"></span>Waiting for Kit's companion app…</p>
+      <p class="small muted">No AI assistant yet? Kit works with <a href="https://claude.com/claude-code" target="_blank" rel="noopener">Claude Code</a>, Codex, Gemini CLI, Hermes Agent, Cursor, Windsurf and Claude Desktop. Install one first, then run the line above.</p>
+      <p class="waiting"><span class="pulse" aria-hidden="true"></span>Waiting for Kit's helper app…</p>
     </div>
   </section>
 

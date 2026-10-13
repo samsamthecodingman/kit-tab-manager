@@ -58,7 +58,7 @@ function showOrganise(organise) {
   $("organise-note").textContent = busy
     ? "Organising your tabs. Kit narrates each change in the tab bar."
     : aiConnected ? "Takes 20–60 seconds. You can keep browsing while Kit works."
-    : "Connect an AI assistant first: it's one command (see the top of this page).";
+    : "Set up AI first: see Set up AI above.";
   if (busy) {
     polling = polling || setInterval(refreshStatus, 2000);
   } else {
@@ -82,6 +82,10 @@ async function refreshStatus() {
   conn.querySelector(".label").textContent = connected ? "AI assistant connected" : "AI not connected";
   $("connect").hidden = connected;
   $("assistants").hidden = !connected;
+  if (!connected) {
+    $("agent").replaceChildren(Object.assign(document.createElement("option"), { value: "", textContent: "Set up AI first (see above)" }));
+    $("agent").disabled = true;
+  }
   if (connected && !agentsLoaded) { agentsLoaded = true; loadAgents(false); }
   // While not connected, check every few seconds so the page updates by itself after setup.
   if (!connected && !connectPolling) connectPolling = setInterval(refreshStatus, 3000);
@@ -132,12 +136,15 @@ async function loadAgents(refresh) {
 
 function showAgents({ agents, chosen }) {
   // Organise picker: connected assistants that can organise; no default beyond the last choice.
-  const usable = agents.filter((a) => a.connected && a.can_organise);
+  const usable = agents.filter((a) => a.connected && a.can_organise && a.signed_in !== false);
   const option = (value, text) => Object.assign(document.createElement("option"), { value, textContent: text });
   const pick = usable.some((a) => a.id === chosen) ? chosen : usable.length === 1 ? usable[0].id : "";
   const options = usable.map((a) => option(a.id, a.name));
   if (usable.length > 1 && !pick) options.unshift(option("", "Choose an assistant…"));
-  if (!usable.length) options.push(option("", "Connect Claude Code, Codex or Hermes Agent below"));
+  if (!usable.length) {
+    const needsSignIn = agents.some((a) => a.connected && a.can_organise && a.signed_in === false);
+    options.push(option("", needsSignIn ? "Sign in to an assistant below first" : "Connect Claude Code, Codex or Hermes Agent below"));
+  }
   $("agent").replaceChildren(...options);
   $("agent").value = pick;
   $("agent").disabled = !usable.length;
@@ -146,16 +153,39 @@ function showAgents({ agents, chosen }) {
   // Cards: every assistant Kit knows, with what it can do and how to connect it.
   $("agent-cards").replaceChildren(...agents.map((a) => {
     const card = Object.assign(document.createElement("article"), { className: "card agent-card" });
+    const signedOut = a.connected && a.signed_in === false;
     const pill = Object.assign(document.createElement("span"), {
-      className: a.connected ? "pill on" : "pill",
-      textContent: a.connected ? "Connected" : a.installed ? "Not connected" : "Not installed",
+      className: signedOut ? "pill warn" : a.connected ? "pill on" : "pill",
+      textContent: signedOut ? "Not signed in" : a.connected ? "Connected" : a.installed ? "Not connected" : "Not installed",
     });
     const what = Object.assign(document.createElement("p"), {
       className: "what",
       textContent: a.can_organise ? "Can see and manage your tabs, and run Organise with AI." : "Can see and manage your tabs.",
     });
     card.append(Object.assign(document.createElement("h3"), { textContent: a.name }), pill, what);
-    if (a.installed && !a.connected) {
+    if (signedOut && a.can_sign_in) {
+      const b = Object.assign(document.createElement("button"), { className: "primary", textContent: "Sign in" });
+      const hint = Object.assign(document.createElement("p"), { className: "what small", hidden: true,
+        textContent: "Your browser opens a sign-in page. Sign in there, then come back here." });
+      b.addEventListener("click", async () => {
+        b.disabled = true;
+        b.textContent = "Waiting for you to sign in…";
+        hint.hidden = false;
+        try {
+          const reply = await send({ cmd: "sign_in", id: a.id });
+          toast(reply.message);
+          showAgents({ agents: reply.agents, chosen: $("agent").value || chosen });
+        } catch (e) {
+          toast(String((e && e.message) || e), true);
+          b.disabled = false;
+          b.textContent = "Sign in";
+          hint.hidden = true;
+        }
+      });
+      card.append(hint, b);
+    } else if (signedOut && a.sign_in_help) {
+      card.append(Object.assign(document.createElement("p"), { className: "what small", textContent: a.sign_in_help }));
+    } else if (a.installed && !a.connected) {
       const b = Object.assign(document.createElement("button"), { className: "primary", textContent: "Connect" });
       b.addEventListener("click", async () => {
         b.disabled = true;
@@ -347,7 +377,7 @@ $("hero-organise").addEventListener("click", organise);
 $("copy-cmd").addEventListener("click", async () => {
   try {
     await navigator.clipboard.writeText($("install-cmd").textContent);
-    toast("Copied. Paste it into a terminal and press Enter.");
+    toast("Copied. Now paste it into Terminal and press Enter.");
   } catch (e) {
     toast("Couldn't copy; select the command instead.", true);
   }
@@ -362,6 +392,17 @@ document.querySelectorAll(".prompt .copy").forEach((b) => b.addEventListener("cl
   }
 }));
 browser.storage.onChanged.addListener(() => renderSaved());
+// "Open Terminal" for the system this browser runs on.
+async function showTerminalHow() {
+  const { os } = await browser.runtime.getPlatformInfo();
+  const how = {
+    mac: "Press ⌘ and Space together, type Terminal, and press Return.",
+    linux: "Press Ctrl, Alt and T together. (Or open your apps menu and search for Terminal.)",
+    win: "Kit's AI features need Linux or macOS for now. Everything else on this page works on Windows.",
+  }[os];
+  if (how) $("terminal-how").textContent = how;
+}
+
 $("version").textContent = `Version ${browser.runtime.getManifest().version}.`;
 
 (async () => {
@@ -371,7 +412,10 @@ $("version").textContent = `Version ${browser.runtime.getManifest().version}.`;
   } catch (e) {
     // labels fall back to the step ids
   }
+  showTerminalHow();
   await Promise.all([renderSaved(), refreshStatus(), refreshOverview()]);
-  if (location.hash === "#connect" && !aiConnected) $("connect").scrollIntoView({ block: "start" });
+  // #welcome: opened right after installing Kit.
+  if (location.hash === "#welcome") toast(aiConnected ? "Kit is ready. Say hi!" : "Welcome! Kit's tidy-ups work now; setting up AI takes a minute.");
+  if ((location.hash === "#connect" || location.hash === "#welcome") && !aiConnected) $("connect").scrollIntoView({ block: "start" });
   if (location.hash === "#assistants" && aiConnected) $("assistants").scrollIntoView({ block: "start" });
 })().catch((e) => toast(String((e && e.message) || e), true));
