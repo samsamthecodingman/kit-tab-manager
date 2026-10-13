@@ -132,7 +132,9 @@ textarea { display: block; width: 100%; font: inherit; color: inherit; backgroun
 .rules li { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
 .rules li:last-child { border-bottom: 0; }
 .rules .kind { color: var(--muted); min-width: 7.5em; }
-.rules .needle { font-weight: 600; }
+.rules .needle { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.rules li { flex-wrap: wrap; }
+.rules li.more { color: var(--muted); }
 .rules .arrow { color: var(--muted); }
 .rules .group { display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px; border-radius: 999px; background: var(--surface-2); font-weight: 600; }
 .rules .group::before { content: ""; width: 9px; height: 9px; border-radius: 3px; background: var(--c); }

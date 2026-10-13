@@ -84,6 +84,7 @@ async function refreshStatus() {
   conn.querySelector(".label").textContent = connected ? "AI assistant connected" : "AI: optional, not set up";
   $("connect").hidden = connected;
   $("assistants").hidden = !connected;
+  if (!connected) agentsLoaded = false; // load them again when the helper comes back
   // Without AI, the AI-only sections stay out of the way; Set up AI explains the option.
   $("organise").hidden = !connected;
   $("ask").hidden = !connected;
@@ -108,7 +109,8 @@ function organise() {
   }
   if (!$("agent").value) {
     $("organise").scrollIntoView({ block: "start" });
-    toast($("agent").options.length > 1 ? "Choose which assistant should organise first." : "Connect Claude Code, Codex or Hermes Agent first.", true);
+    toast($("agent").options.length > 1 ? "Choose which assistant should organise first."
+      : signedOutOrganiser ? `Sign in to ${signedOutOrganiser} first (see AI assistants).` : "Connect Claude Code, Codex or Hermes Agent first.", true);
     return;
   }
   const clicked = Date.now();
@@ -132,11 +134,13 @@ const AGENT_SITES = {
   cursor: "https://cursor.com", windsurf: "https://windsurf.com", "claude-desktop": "https://claude.ai/download",
 };
 let agentsLoaded = false;
+let signedOutOrganiser = ""; // the name of a connected assistant that could organise once signed in
 
 async function loadAgents(refresh) {
   try {
     showAgents(await send({ cmd: "agents", refresh }));
   } catch (e) {
+    agentsLoaded = false; // try again on the next status check
     toast(String((e && e.message) || e), true);
   }
 }
@@ -144,6 +148,9 @@ async function loadAgents(refresh) {
 function showAgents({ agents, chosen }) {
   // Organise picker: connected assistants that can organise; no default beyond the last choice.
   const usable = agents.filter((a) => a.connected && a.can_organise && a.signed_in !== false);
+  signedOutOrganiser = (agents.find((a) => a.connected && a.can_organise && a.signed_in === false) || {}).name || "";
+  // The header says whether Organise is ready, not just whether Kit's helper is running.
+  $("conn").querySelector(".label").textContent = usable.length ? "AI ready" : "AI: finish setting up below";
   const option = (value, text) => Object.assign(document.createElement("option"), { value, textContent: text });
   const pick = usable.some((a) => a.id === chosen) ? chosen : usable.length === 1 ? usable[0].id : "";
   const options = usable.map((a) => option(a.id, a.name + (a.experimental ? " (experimental)" : "")));
@@ -193,8 +200,9 @@ function showAgents({ agents, chosen }) {
         }
       });
       card.append(hint, b);
-    } else if (signedOut && a.sign_in_help) {
-      card.append(Object.assign(document.createElement("p"), { className: "what small", textContent: a.sign_in_help }));
+    } else if (signedOut) {
+      card.append(Object.assign(document.createElement("p"), { className: "what small",
+        textContent: a.sign_in_help || `Sign in to ${a.name} in its own app or terminal, then press Check again.` }));
     } else if (a.installed && !a.connected) {
       const b = Object.assign(document.createElement("button"), { className: "primary", textContent: "Connect" });
       b.addEventListener("click", async () => {
@@ -258,7 +266,8 @@ async function renderSaved() {
   $("lists").hidden = lists.length === 0;
   $("no-lists").hidden = lists.length > 0;
 
-  const shown = rules.filter((r) => r.text && r.group).slice(0, 6);
+  const complete = rules.filter((r) => r.text && r.group);
+  const shown = complete.slice(0, 6);
   $("rules").replaceChildren(...shown.map((r) => {
     const li = document.createElement("li");
     const kind = Object.assign(document.createElement("span"), { className: "kind", textContent: FIELD_LABEL[r.field] || FIELD_LABEL.title });
@@ -269,6 +278,9 @@ async function renderSaved() {
     li.append(kind, needle, arrow, group);
     return li;
   }));
+  if (complete.length > shown.length) {
+    $("rules").append(Object.assign(document.createElement("li"), { className: "more", textContent: `…and ${complete.length - shown.length} more under Rules & lists` }));
+  }
   $("rules").hidden = shown.length === 0;
   $("no-rules").hidden = shown.length > 0;
   const n = rules.length;

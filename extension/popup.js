@@ -113,6 +113,7 @@ function showAgents({ agents, chosen }) {
   $("organise").disabled = !canOrganise || wasBusy;
   $("organise-note").textContent = noteFor(pick);
   signInAgent = agents.find((a) => a.connected && a.can_organise && a.signed_in === false && a.can_sign_in) || null;
+  $("conn").textContent = usable.length ? "AI ready" : "AI: needs setting up";
   const desktopOnly = !usable.length && !signInAgent && agents.some((a) => a.id === "claude-desktop" && a.installed) &&
     !agents.some((a) => a.can_organise && a.installed);
   showSetup(usable.length ? null : signInAgent ? "signin" : desktopOnly ? "desktop" : "connect");
@@ -141,6 +142,7 @@ function showUndo(label) {
 async function showCounts() {
   let p;
   try { p = await send({ cmd: "previews" }); } catch (e) { return; }
+  if (!p || !p.group_by_site) return;
   const set = (id, text) => ($(id).textContent = text);
   set("n-group_by_site", p.group_by_site.groups ? `${p.group_by_site.tabs} tabs → ${p.group_by_site.groups} groups` : "nothing to group");
   set("n-apply_rules", !p.rules ? "no rules yet" : p.apply_rules ? `${p.apply_rules} tab${p.apply_rules === 1 ? "" : "s"}` : "");
@@ -156,7 +158,7 @@ async function init() {
   showOrganise(organise, true);
   showUndo(undo);
   showCounts();
-  $("conn").textContent = connected ? "AI connected" : "Tab manager"; // no AI is a normal state, not an error
+  $("conn").textContent = connected ? "Checking AI…" : "Tab manager"; // no AI is a normal state, not an error
   if (!connected) showSetup("app");
   else $("organise-controls").hidden = false; // until the assistants load
   $("lists").replaceChildren(...lists.map((name, index) => {
@@ -166,7 +168,15 @@ async function init() {
     return b;
   }));
   $("no-lists").hidden = lists.length > 0;
-  if (connected) showAgents(await send({ cmd: "agents" })); // can take a few seconds the first time
+  if (connected) { // can take a few seconds the first time
+    try {
+      showAgents(await send({ cmd: "agents" }));
+    } catch (e) {
+      $("agent").replaceChildren(Object.assign(document.createElement("option"), { value: "", textContent: "Couldn't check assistants" }));
+      $("conn").textContent = "AI: couldn't check";
+      status(String((e && e.message) || e), "bad");
+    }
+  }
 }
 
 document.querySelectorAll("[data-action]").forEach((b) =>
@@ -239,4 +249,7 @@ $("undo").addEventListener("click", () => run($("undo"), { cmd: "undo" }));
 $("expand-foot").addEventListener("click", openHome);
 $("options").addEventListener("click", () => { browser.runtime.openOptionsPage(); window.close(); });
 
-init().catch((e) => status(String((e && e.message) || e), "bad"));
+init().catch((e) => {
+  $("conn").textContent = "Tab manager";
+  status(String((e && e.message) || e), "bad");
+});
