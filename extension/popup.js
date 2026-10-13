@@ -59,56 +59,106 @@ function dismissResult() {
 }
 
 // The picker lists only connected assistants that can organise; there's no default beyond your last choice.
-// What to set up before Organise works: the companion app, an assistant, or a sign-in.
-function showSetup(step) {
+// What to set up before Organise works, as one card with one button. AI is optional: "Not now"
+// shrinks the card to a single line, and Kit remembers that.
+let setupStep = null;
+let signInAgent = null;
+let agentsById = {};
+async function showSetup(step) {
+  setupStep = step;
   const steps = {
-    app: ["Let AI organise your tabs", "Kit's tidy-ups below already work. AI needs a one-time setup: paste one line, takes about a minute.", "Set up AI", "home.html#connect"],
-    connect: ["Connect an AI assistant", "Kit is set up. Connect Claude Code, Codex or Hermes Agent to organise your tabs.", "Connect one", "home.html#assistants"],
-    signin: ["Sign in to organise", "Your AI assistant is connected but not signed in. Signing in takes a minute in your browser.", "Sign in", "home.html#assistants"],
+    app: ["Want AI to organise your tabs?", "Optional. It needs a one-time setup on your computer (Mac or Linux): copy one line into Terminal.", "Show me how", "home.html#connect"],
+    connect: ["Connect an AI assistant", "Kit's helper is installed. Connect Claude Code, Codex or Hermes Agent to organise your tabs.", "Connect one", "home.html#assistants"],
+    signin: ["Sign in to organise", "", "Sign in", null],
+    desktop: ["Organising needs Claude Code", "You can already ask Claude in the Claude app about your tabs. The one-click Organise here needs Claude Code, which signs in with the same account.", "How to get it", "home.html#assistants"],
   };
+  const hidden = step === "app" && (await browser.storage.local.get("aiSetupLater")).aiSetupLater;
   $("organise-controls").hidden = !!step;
-  $("setup-card").hidden = !step;
+  $("setup-card").hidden = !step || hidden;
+  $("setup-line").hidden = !hidden;
   if (!step) return;
   const [title, text, button, page] = steps[step];
   $("setup-title").textContent = title;
-  $("setup-text").textContent = text;
+  $("setup-text").textContent = step === "signin"
+    ? `${signInAgent.name} is connected but needs its own sign-in (separate from the Claude app). Your browser opens a sign-in page.`
+    : text;
   $("setup").textContent = button;
-  $("setup").dataset.page = page;
+  $("setup").dataset.page = page || "";
+  $("setup-later").hidden = step !== "app";
 }
 
+function agentLabel(a) {
+  return a.name + (a.experimental ? " (experimental)" : "");
+}
+
+function noteFor(id) {
+  const a = agentsById[id];
+  const how = a && a.model ? `Uses ${a.name} (${a.model}) on your own plan. ` : "";
+  return `${how}It can group, move and rename, but can't close tabs.`;
+}
+
+// The picker lists only connected assistants that can organise, and that aren't known to be signed
+// out; there's no default beyond your last choice.
 function showAgents({ agents, chosen }) {
+  agentsById = Object.fromEntries(agents.map((a) => [a.id, a]));
   const usable = agents.filter((a) => a.connected && a.can_organise && a.signed_in !== false);
   const select = $("agent");
-  const options = usable.map((a) => Object.assign(document.createElement("option"), { value: a.id, textContent: a.name }));
+  const options = usable.map((a) => Object.assign(document.createElement("option"), { value: a.id, textContent: agentLabel(a) }));
   const pick = usable.some((a) => a.id === chosen) ? chosen : usable.length === 1 ? usable[0].id : "";
   if (usable.length > 1 && !pick) options.unshift(Object.assign(document.createElement("option"), { value: "", textContent: "Choose an assistant…" }));
-  if (!usable.length) options.push(Object.assign(document.createElement("option"), { value: "", textContent: "No assistant connected" }));
   select.replaceChildren(...options);
   select.value = pick;
   select.disabled = usable.length === 0;
   canOrganise = !!pick;
   $("organise").disabled = !canOrganise || wasBusy;
-  const needsSignIn = agents.some((a) => a.connected && a.can_organise && a.signed_in === false);
-  showSetup(usable.length ? null : needsSignIn ? "signin" : "connect");
+  $("organise-note").textContent = noteFor(pick);
+  signInAgent = agents.find((a) => a.connected && a.can_organise && a.signed_in === false && a.can_sign_in) || null;
+  const desktopOnly = !usable.length && !signInAgent && agents.some((a) => a.id === "claude-desktop" && a.installed) &&
+    !agents.some((a) => a.can_organise && a.installed);
+  showSetup(usable.length ? null : signInAgent ? "signin" : desktopOnly ? "desktop" : "connect");
 }
 
 $("agent").addEventListener("change", (e) => {
   canOrganise = !!e.target.value;
   $("organise").disabled = !canOrganise || wasBusy;
+  $("organise-note").textContent = noteFor(e.target.value);
   if (e.target.value) send({ cmd: "choose_agent", id: e.target.value });
 });
 
 async function refresh() {
-  showOrganise((await send({ cmd: "status" })).organise);
+  const st = await send({ cmd: "status" });
+  showOrganise(st.organise);
+  showUndo(st.undo);
+  showCounts();
+}
+
+function showUndo(label) {
+  $("undo").hidden = !label;
+  if (label) $("undo").textContent = `↶ Undo: ${label}`;
+}
+
+// How much each tidy-up would change right now.
+async function showCounts() {
+  let p;
+  try { p = await send({ cmd: "previews" }); } catch (e) { return; }
+  const set = (id, text) => ($(id).textContent = text);
+  set("n-group_by_site", p.group_by_site.groups ? `${p.group_by_site.tabs} tabs → ${p.group_by_site.groups} groups` : "nothing to group");
+  set("n-apply_rules", p.apply_rules ? `${p.apply_rules} tab${p.apply_rules === 1 ? "" : "s"}` : "");
+  set("n-sort_groups", p.groups ? `${p.groups} group${p.groups === 1 ? "" : "s"}` : "no groups");
+  set("n-collapse_all", p.expanded ? `${p.expanded} open` : "");
+  set("n-dupes", p.duplicates ? String(p.duplicates) : "none");
 }
 
 async function init() {
   drawHeader();
-  const { connected, lists, organise } = await send({ cmd: "status" });
+  const { connected, lists, organise, undo } = await send({ cmd: "status" });
   aiConnected = connected;
   showOrganise(organise, true);
-  $("conn").textContent = connected ? "AI connected" : "AI not connected";
-  showSetup(connected ? null : "app");
+  showUndo(undo);
+  showCounts();
+  $("conn").textContent = connected ? "AI connected" : "Tab manager"; // no AI is a normal state, not an error
+  if (!connected) showSetup("app");
+  else $("organise-controls").hidden = false; // until the assistants load
   $("lists").replaceChildren(...lists.map((name, index) => {
     const b = document.createElement("button");
     b.textContent = name;
@@ -167,9 +217,25 @@ $("kit-hi").addEventListener("click", sayHi);
 const openHome = () => { browser.tabs.create({ url: browser.runtime.getURL("home.html") }); window.close(); };
 $("expand").addEventListener("click", openHome);
 $("setup").addEventListener("click", () => {
+  if (setupStep === "signin" && signInAgent) {
+    // Sign in straight away: the background runs it and Kit says when it's done.
+    send({ cmd: "sign_in", id: signInAgent.id }).catch(() => {});
+    status("Opening the sign-in page in your browser…");
+    setTimeout(() => window.close(), 1500);
+    return;
+  }
   browser.tabs.create({ url: browser.runtime.getURL($("setup").dataset.page || "home.html#connect") });
   window.close();
 });
+$("setup-later").addEventListener("click", async () => {
+  await browser.storage.local.set({ aiSetupLater: true });
+  showSetup("app");
+});
+$("setup-show").addEventListener("click", async () => {
+  await browser.storage.local.set({ aiSetupLater: false });
+  showSetup("app");
+});
+$("undo").addEventListener("click", () => run($("undo"), { cmd: "undo" }));
 $("expand-foot").addEventListener("click", openHome);
 $("options").addEventListener("click", () => { browser.runtime.openOptionsPage(); window.close(); });
 

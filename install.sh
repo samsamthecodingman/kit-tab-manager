@@ -1,11 +1,16 @@
 #!/bin/sh
-# Installs Kit's companion app, so Kit's AI features (Claude Code's tab tools and
-# "Organise with Claude") work in Firefox, LibreWolf, Floorp, Waterfox and Zen.
+# Installs Kit's companion app, so Kit's AI features (your assistant's tab tools and
+# "Organise with AI") work in Firefox, LibreWolf, Floorp, Waterfox and Zen.
 # Kit's rules, lists and tidy-ups work without it.
 #
 #   curl -fsSL https://raw.githubusercontent.com/samsamthecodingman/kit-tab-manager/master/install.sh | sh
 #   ./install.sh              (from a copy of the repo)
 #   ./install.sh --uninstall
+#
+# Options (they can be combined; when piped from curl, pass them with `| sh -s -- --dry-run`):
+#   --dry-run    show what would be written, registered and edited, and change nothing
+#   --verbose    show the details: file locations, each browser folder, the MCP command line
+#   --yes        don't ask before connecting your AI assistants
 #
 # It needs python3 (already on most Linux and macOS systems) and changes only files in your home folder:
 #   - kit.py and a small launcher in Kit's folder (see APP_DIR below)
@@ -13,12 +18,38 @@
 #   - the MCP server lists of the AI assistants it finds (Claude Code, Codex, Hermes Agent, Gemini CLI, Cursor, ...)
 set -eu
 
-REPO_RAW="https://raw.githubusercontent.com/samsamthecodingman/kit-tab-manager/master"
+# The release to download kit.py from, so a release's installer always fetches that release's kit.py.
+# Bump this with each release, to the same version as extension/manifest.json (and VERSION in kit.py).
+KIT_REF="${KIT_REF:-v0.10.0}"
+REPO_RAW="https://raw.githubusercontent.com/samsamthecodingman/kit-tab-manager/$KIT_REF"
+# Downloads kit.py for this release, or the latest one if the release isn't tagged yet.
+get_kit() {
+  curl -fsSL "$REPO_RAW/kit.py" -o "$1" 2>/dev/null ||
+    curl -fsSL "https://raw.githubusercontent.com/samsamthecodingman/kit-tab-manager/master/kit.py" -o "$1" ||
+    fail "couldn't download kit.py from GitHub."
+}
 EXTENSION_ID="tab-bridge@samroberts.local"
 HOST_NAME="tab_bridge"
 LISTING="https://addons.mozilla.org/firefox/addon/kit-tab-manager/"
 
+UNINSTALL=0 VERBOSE=0 DRY=0 YES=0
+for arg in "$@"; do
+  case "$arg" in
+    --uninstall) UNINSTALL=1 ;;
+    --verbose) VERBOSE=1 ;;
+    --dry-run) DRY=1 ;;
+    --yes) YES=1 ;;
+    *) printf 'Unknown option: %s\nOptions: --dry-run, --verbose, --yes, --uninstall\n' "$arg" >&2; exit 2 ;;
+  esac
+done
+# What kit.py register / unregister is told (the flags have no spaces, so this is safe unquoted).
+KIT_FLAGS=""
+[ "$VERBOSE" = 1 ] && KIT_FLAGS="$KIT_FLAGS --verbose"
+[ "$DRY" = 1 ] && KIT_FLAGS="$KIT_FLAGS --dry-run"
+[ "$YES" = 1 ] && KIT_FLAGS="$KIT_FLAGS --yes"
+
 say() { printf '%s\n' "$*"; }
+vsay() { if [ "$VERBOSE" = 1 ]; then printf '    %s\n' "$*"; fi; }
 if [ -t 1 ]; then step() { printf '\n\033[1m%s\033[0m\n' "$*"; }; else step() { printf '\n%s\n' "$*"; }; fi
 fail() { printf '\nKit setup stopped: %s\n' "$*" >&2; exit 1; }
 
@@ -55,46 +86,88 @@ for_each_browser_dir() { # runs "$1 <browser> <folder>" for each registration fo
   browser_dirs | while IFS='|' read -r name dir; do "$1" "$name" "$dir"; done
 }
 
-if [ "${1:-}" = "--uninstall" ]; then
-  step "Removing Kit's companion app"
+if [ "$UNINSTALL" = 1 ]; then
+  step "Removing Kit"
+  if [ "$DRY" = 1 ]; then
+    say "(Dry run: nothing will be changed.)"
+    browser_dirs | while IFS='|' read -r name dir; do say "Would remove $dir/$HOST_NAME.json ($name)"; done
+    if [ -f "$APP_DIR/kit.py" ]; then python3 "$APP_DIR/kit.py" unregister $KIT_FLAGS || true; fi
+    say "Would delete $APP_DIR"
+    exit 0
+  fi
   remove_manifest() { rm -f "$2/$HOST_NAME.json"; }
   for_each_browser_dir remove_manifest
-  if [ -f "$APP_DIR/kit.py" ]; then python3 "$APP_DIR/kit.py" unregister || true; fi
+  say "✓ Disconnected from your browsers"
+  # kit.py (still installed at this point) disconnects the assistants, then offers to delete the leftovers.
+  if [ -f "$APP_DIR/kit.py" ]; then
+    python3 "$APP_DIR/kit.py" unregister $KIT_FLAGS || true
+  else
+    say "Kit's logs are in ${XDG_DATA_HOME:-$HOME/.local/share}/tab-bridge. To delete them: rm -rf \"${XDG_DATA_HOME:-$HOME/.local/share}/tab-bridge\""
+  fi
   rm -rf "$APP_DIR"
+  say "✓ Removed Kit's helper app"
+  say ""
   say "Done. Remove the Kit extension itself from your browser's Add-ons page (about:addons)."
-  say "Kit's logs are kept in ${XDG_DATA_HOME:-$HOME/.local/share}/tab-bridge, and assistants' settings backups end in .before-kit; delete them if you like."
   exit 0
 fi
 
-step "1/3  Checking Python"
+step "Kit setup"
+[ "$DRY" = 1 ] && say "(Dry run: nothing will be changed.)"
+
 # Prefer the system's own Python, so removing a conda or pyenv Python later can't break Kit.
 PYTHON=""
 # On macOS, /usr/bin/python3 is a stub that pops up an installer unless the Command Line Tools are there.
+NEED_TOOLS=0
 SYSTEM_PY=/usr/bin/python3
-if [ "$(uname -s)" = Darwin ] && ! xcode-select -p >/dev/null 2>&1; then SYSTEM_PY=""; fi
+if [ "$(uname -s)" = Darwin ] && ! xcode-select -p >/dev/null 2>&1; then SYSTEM_PY=""; NEED_TOOLS=1; fi
 for p in $SYSTEM_PY /usr/local/bin/python3 /opt/homebrew/bin/python3 "$(command -v python3 || true)"; do
+  [ "$NEED_TOOLS" = 1 ] && [ "$p" = /usr/bin/python3 ] && continue # the stub: running it would only open the installer
   if [ -n "$p" ] && [ -x "$p" ] && "$p" -c 'import sys; sys.exit(sys.version_info < (3, 8))' 2>/dev/null; then PYTHON="$p"; break; fi
 done
+if [ -z "$PYTHON" ] && [ "$NEED_TOOLS" = 1 ]; then
+  xcode-select --install >/dev/null 2>&1 || true # opens macOS's own installer window
+  fail "Kit needs Python, and this Mac doesn't have it yet. macOS may now ask to install \"developer tools\": click Install, wait for it to finish, then run the same line again."
+fi
 [ -n "$PYTHON" ] || PYTHON="$(command -v python3 || true)"
-[ -n "$PYTHON" ] || fail "python3 isn't installed. Install it with your system's package manager (on macOS: xcode-select --install), then run this again."
+[ -n "$PYTHON" ] || fail "python3 isn't installed. Install it with your system's package manager, then run this again."
 "$PYTHON" -c 'import sys; sys.exit(sys.version_info < (3, 8))' || fail "Kit needs Python 3.8 or newer ($("$PYTHON" --version 2>&1) found)."
-say "Using $("$PYTHON" --version 2>&1) at $PYTHON"
+say "✓ Python found"
+vsay "$("$PYTHON" --version 2>&1) at $PYTHON"
 
-step "2/3  Installing Kit's companion app"
-mkdir -p "$APP_DIR"
 # From a copy of the repo, use its kit.py. Piped from curl, $0 is just "sh", so download instead
 # (rather than picking up some other kit.py in the current folder).
 HERE="$(cd "$(dirname "$0")" 2>/dev/null && pwd || true)"
 if [ -f "$0" ] && [ -n "$HERE" ] && [ -f "$HERE/kit.py" ] && [ -f "$HERE/extension/manifest.json" ]; then
-  cp "$HERE/kit.py" "$APP_DIR/kit.py"
+  SOURCE="$HERE/kit.py"
 else
+  SOURCE=""
   command -v curl >/dev/null 2>&1 || fail "curl isn't installed, so Kit can't be downloaded."
-  curl -fsSL "$REPO_RAW/kit.py" -o "$APP_DIR/kit.py" || fail "couldn't download kit.py from GitHub."
+fi
+
+if [ "$DRY" = 1 ]; then
+  if [ -z "$SOURCE" ]; then # a dry run still needs kit.py to show what it would do, so fetch it somewhere temporary
+    TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
+    get_kit "$TMP/kit.py"
+    SOURCE="$TMP/kit.py"
+  fi
+  say "Would copy kit.py ($("$PYTHON" "$SOURCE" --version)) to $APP_DIR/kit.py"
+  say "Would write the launcher $LAUNCHER"
+  browser_dirs | while IFS='|' read -r name dir; do say "Would write $dir/$HOST_NAME.json ($name)"; done
+  KIT_APP_PATH="$APP_DIR/kit.py" "$PYTHON" "$SOURCE" register "$PYTHON" $KIT_FLAGS
+  exit 0
+fi
+
+mkdir -p "$APP_DIR"
+if [ -n "$SOURCE" ]; then
+  cp "$SOURCE" "$APP_DIR/kit.py"
+else
+  get_kit "$APP_DIR/kit.py"
 fi
 # The browser starts this launcher with a bare environment, so it names python3 by its full path.
 printf '#!/bin/sh\nexec "%s" "%s" "$@"\n' "$PYTHON" "$APP_DIR/kit.py" > "$LAUNCHER"
 chmod 755 "$LAUNCHER" "$APP_DIR/kit.py"
-say "Installed $("$PYTHON" "$APP_DIR/kit.py" --version) in $APP_DIR"
+say "✓ Kit's helper app installed"
+vsay "$("$PYTHON" "$APP_DIR/kit.py" --version) in $APP_DIR"
 
 write_manifest() {
   mkdir -p "$2"
@@ -107,15 +180,19 @@ write_manifest() {
   "allowed_extensions": ["$EXTENSION_ID"]
 }
 EOF
-  say "Registered with $1 in $2"
+  vsay "Registered with $1 in $2"
 }
 for_each_browser_dir write_manifest
+# One line however many browsers and folders there are: "Firefox", or "Firefox, Zen and Floorp".
+BROWSERS="$(browser_dirs | cut -d'|' -f1 | awk '!seen[$0]++' | paste -sd, - | sed 's/,/, /g; s/\(.*\), /\1 and /')"
+say "✓ Connected to $BROWSERS"
 
-step "3/3  Connecting your AI assistants"
-"$PYTHON" "$APP_DIR/kit.py" register "$PYTHON"
-say "Any other MCP-compatible assistant can use Kit too: point it at"
-say "    $PYTHON \"$APP_DIR/kit.py\" mcp"
+"$PYTHON" "$APP_DIR/kit.py" register "$PYTHON" $KIT_FLAGS
+if [ "$VERBOSE" = 1 ]; then
+  say "Any other MCP-compatible assistant can use Kit too: point it at"
+  say "    $PYTHON \"$APP_DIR/kit.py\" mcp"
+fi
 
-step "All set."
-say "If you haven't yet, add the Kit extension to your browser: $LISTING"
-say "Kit's menu shows \"Connected\" within a few seconds (reload the extension if it doesn't)."
+say ""
+say "If you haven't added the Kit extension to your browser yet: $LISTING"
+say "All set. Switch back to Firefox: Kit's page updates by itself within a few seconds."

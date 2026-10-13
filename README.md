@@ -32,6 +32,7 @@ Let your AI assistant list, group, move, switch, close and read your tabs, or ti
 - [How it works](#how-it-works)
 - [Install](#install)
 - [Use it](#use-it)
+- [Permissions](#permissions)
 - [Safety and privacy](#safety-and-privacy)
 - [Troubleshooting](#troubleshooting)
 - [Development](#development)
@@ -109,15 +110,35 @@ To let your AI assistant see your tabs, and to use **Organise with AI**, run thi
 curl -fsSL https://raw.githubusercontent.com/samsamthecodingman/kit-tab-manager/master/install.sh | sh
 ```
 
-It installs Kit's companion app in your home folder (it needs `python3`, which most systems already have), registers it with your browsers, and connects the AI assistants it finds. Kit's menu then says **AI assistant connected**. Run it again any time to update; `sh install.sh --uninstall` removes it.
+It installs Kit's companion app in your home folder (it needs `python3`, which most systems already have), registers it with your browsers, and connects the AI assistants it finds. It lists the assistants it found and **asks once** before connecting them (`--yes` skips the question). Kit is registered globally (user scope) in each assistant, so it's available in every project. Kit's menu then says **AI assistant connected**, and Kit's page updates by itself within a few seconds. Run it again any time to update; `sh install.sh --uninstall` removes it, then offers to delete the logs and `*.before-kit` backups it leaves behind.
+
+Want to read it first? It's one short shell script:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/samsamthecodingman/kit-tab-manager/master/install.sh -o install.sh
+less install.sh
+sh install.sh
+```
+
+The output is short by default. Add options after `sh install.sh` (or `| sh -s -- ...` when piping):
+
+| Option | What it does |
+|---|---|
+| `--dry-run` | Shows what it would write, register and edit, and changes nothing. |
+| `--verbose` | Shows the details: file locations, each browser folder, and the command other MCP apps can use. |
+| `--yes` | Doesn't ask before connecting your assistants. |
+
+The installer downloads the `kit.py` that belongs to its own release (it's pinned to a release tag), so what you read is what runs.
 
 | AI assistant | Setup | Status |
 |---|---|---|
-| [Claude Code](https://claude.com/claude-code) | Connected automatically | Tested, including **Organise with AI** |
-| [Codex](https://github.com/openai/codex) | Connected automatically | Can run **Organise with AI**; should work, not tested end to end yet |
-| [Hermes Agent](https://hermes-agent.nousresearch.com) | Connected automatically | Connection tested; can run **Organise with AI** (not tested end to end yet). Type `/reload-mcp` in an open session after connecting. |
+| [Claude Code](https://claude.com/claude-code) | Connected automatically | Tested, including **Organise with AI**, which uses the Sonnet model on your own plan |
+| [Codex](https://github.com/openai/codex) | Connected automatically | **Organise with AI** is experimental: should work, not tested end to end yet |
+| [Hermes Agent](https://hermes-agent.nousresearch.com) | Connected automatically | Connection tested; **Organise with AI** is experimental (not tested end to end yet). Type `/reload-mcp` in an open session after connecting. |
 | Gemini CLI, Cursor, Windsurf, Claude Desktop | Connected automatically if installed | Tab tools should work (they all speak MCP); not tested yet |
 | VS Code and other MCP apps | Add by hand: run `python3 ~/.local/share/kit/kit.py mcp` (on macOS, `~/Library/Application Support/Kit/kit.py`) | Should work |
+
+If you only have the Claude desktop app, Kit uses the Claude Code that comes built into it; sign in once (Kit's installer offers, or use **Sign in** on Kit's full page) and you're set.
 
 You can also connect assistants later from Kit's full page (**AI assistants**), and pick which one runs **Organise with AI** in the menu or on the full page; Kit remembers your choice and has no default.
 
@@ -155,20 +176,37 @@ To try the extension from the code, open `about:debugging` → **This Firefox** 
 - **Say hi** (top right) brings Kit out without touching any tabs.
 - **⤢** (top right) opens Kit's full page, which explains every feature and shows live counts of your tabs, groups and duplicates.
 
+## Permissions
+
+Firefox shows these when you add Kit. Here's what each is for:
+
+| Permission | Why Kit needs it |
+|---|---|
+| `tabs` | To list your tabs (titles, addresses, positions) and to move, switch and close them. |
+| `tabGroups` | To create, rename, recolour, collapse and ungroup tab groups. |
+| `<all_urls>` | Only to read a tab's text, and only when your AI assistant asks to read that tab. Kit runs a small fixed piece of its own code in the page for this; it never clicks, types or changes the page. |
+| `nativeMessaging` | To talk to Kit's companion app on your computer (the only thing the extension talks to). |
+| `theme` | For Kit's tab-bar walk: Kit temporarily sets a copy of your current theme with Kit drawn on it. Your theme's colours are copied and restored afterwards. |
+| `storage` | To keep your rules, lists and settings in Firefox. |
+
+Kit also declares `data_collection_permissions` (browsing activity and website content), which is Firefox's way of saying the extension handles that data. Kit itself sends nothing to the internet; see [what leaves your machine](#safety-and-privacy) and the [privacy policy](PRIVACY.md).
+
 ## Safety and privacy
 
 - **No clicking, typing or form submission.** The extension never navigates to new addresses or submits anything.
 - **Private windows are invisible** to Kit: their tabs are never listed or read.
 - **Page text is data, not instructions.** `read_tab` returns whatever a page says; the AI is told to treat it as untrusted.
 - **Closed tabs can be recovered.** They're logged to `~/.local/share/tab-bridge/closed.jsonl`, and Firefox's **History → Recently Closed Tabs** reopens them. Closing duplicates from the menu always shows you the list first.
-- **Organise with AI is fenced in.** Whichever assistant you pick runs unattended in an empty folder with no shell, file or web tools, and talks to a version of Kit's MCP server that only has the grouping tools, so it can't close or read tabs. Claude Code runs with `--tools ""` and an allow-list; Codex with its shell switched off, a read-only sandbox and none of your other settings; Hermes limited to Kit's grouping toolset. Each run stops after 5 minutes. Runs are logged to `~/.local/share/tab-bridge/organise.log`.
+- **Organise with AI is fenced in.** Whichever assistant you pick runs unattended in an empty folder with no shell, file or web tools, and talks to a version of Kit's MCP server that only has the grouping tools, so it can't close or read tabs. Claude Code runs with `--tools ""` and an allow-list; Codex with its shell switched off, a read-only sandbox and none of your other settings; Hermes limited to Kit's grouping toolset. Each run stops after 5 minutes. Runs are logged to `~/.local/share/tab-bridge/organise.log` (the time, your optional instruction and the assistant's summary). With Claude Code, Organise uses the Sonnet model under your own account and plan.
 - **What leaves your machine:** only when you use an AI assistant (or **Organise with AI**) are tab titles and addresses, and any page text it asks to read, sent to that assistant's provider as part of your conversation: Anthropic for Claude Code, OpenAI for Codex, Google for Gemini CLI, whichever model provider you've set up in Hermes, and so on. **Organise with AI** sends to the provider of the assistant you picked. Rules, lists and one-click actions run entirely locally.
 
 ## Troubleshooting
 
 | Symptom | Fix |
 |---|---|
-| Menu says **AI not connected** | That's expected if you haven't run the setup command; Kit's other features still work. If you have, run it again, then reload the extension from `about:addons`. |
+| Menu says **AI not connected** | That's expected if you haven't run the setup command; Kit's other features still work. If you have, run it again (add `--verbose` to see what it did), then switch back to Firefox and give it a few seconds. |
+| The installer says **needs developer tools** (macOS) | macOS may ask to install "developer tools": click Install, wait for it to finish, then run the same line again. |
+| The installer says an assistant **couldn't be connected** | Run it again with `--verbose` to see why, or add Kit by hand: see the table above. Your other assistants are unaffected. |
 | Your AI assistant says **Firefox isn't connected** | Make sure Firefox is open and the extension is loaded (a temporary add-on disappears on restart). |
 | A tab can't be read | Firefox doesn't let extensions read built-in pages (`about:`, the PDF viewer, addons.mozilla.org). |
 | Organise says your assistant **isn't signed in** (or Claude Code says "Please run /login") | Open Kit's full page and press **Sign in** next to the assistant; your browser opens its sign-in page. Signing in to the Claude *app* doesn't sign in Claude Code: they sign in separately. |

@@ -2,7 +2,7 @@
 :root {
   --bg: #faf9f6; --surface: #ffffff; --surface-2: #f3f1ec; --hover: #f4f2ee;
   --fg: #1f1e1d; --muted: #6b6a66; --line: #e6e3dc;
-  --accent: #c4673f; --accent-hover: #b45b35; --accent-fg: #ffffff; --accent-soft: #fbeee7; --accent-text: #a8532c;
+  --accent: #b45b35; --accent-hover: #a8532c; --accent-fg: #ffffff; --accent-soft: #fbeee7; --accent-text: #a8532c;
   --bad: #a32d2d; --stage: #1c1b22; --stage-2: #2b2a33;
   --radius: 14px;
   color-scheme: light dark;

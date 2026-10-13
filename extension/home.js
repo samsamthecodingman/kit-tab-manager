@@ -27,6 +27,7 @@ async function run(button, msg) {
     toast(String((e && e.message) || e), true);
   } finally {
     button.disabled = false;
+    send({ cmd: "status" }).then((st) => showUndo(st.undo)).catch(() => {});
   }
 }
 
@@ -54,6 +55,7 @@ function showOrganise(organise) {
     b.disabled = busy;
     b.textContent = busy ? "Organising…" : "Organise my tabs";
   }
+  if (!aiConnected) $("hero-organise").textContent = "Tidy my tabs"; // without AI, the main button groups by website
   $("organise-btn").disabled = busy || !aiConnected || !$("agent").value;
   $("organise-note").textContent = busy
     ? "Organising your tabs. Kit narrates each change in the tab bar."
@@ -74,14 +76,19 @@ function showOrganise(organise) {
 }
 
 async function refreshStatus() {
-  const { connected, organise } = await send({ cmd: "status" });
+  const { connected, organise, undo } = await send({ cmd: "status" });
   const justConnected = connected && !aiConnected && connectPolling;
   aiConnected = connected;
   const conn = $("conn");
-  conn.className = connected ? "conn on" : "conn off";
-  conn.querySelector(".label").textContent = connected ? "AI assistant connected" : "AI not connected";
+  conn.className = connected ? "conn on" : "conn"; // no AI is a normal state, not an error
+  conn.querySelector(".label").textContent = connected ? "AI assistant connected" : "AI: optional, not set up";
   $("connect").hidden = connected;
   $("assistants").hidden = !connected;
+  // Without AI, the AI-only sections stay out of the way; Set up AI explains the option.
+  $("organise").hidden = !connected;
+  $("ask").hidden = !connected;
+  showUndo(undo);
+  if (!connected) setTimeout(() => { if (!aiConnected) $("still-waiting").hidden = false; }, 120000);
   if (!connected) {
     $("agent").replaceChildren(Object.assign(document.createElement("option"), { value: "", textContent: "Set up AI first (see above)" }));
     $("agent").disabled = true;
@@ -96,7 +103,7 @@ async function refreshStatus() {
 
 function organise() {
   if (!aiConnected) {
-    $("connect").scrollIntoView({ block: "start" });
+    run($("hero-organise"), { cmd: "action", action: "group_by_site" });
     return;
   }
   if (!$("agent").value) {
@@ -139,7 +146,7 @@ function showAgents({ agents, chosen }) {
   const usable = agents.filter((a) => a.connected && a.can_organise && a.signed_in !== false);
   const option = (value, text) => Object.assign(document.createElement("option"), { value, textContent: text });
   const pick = usable.some((a) => a.id === chosen) ? chosen : usable.length === 1 ? usable[0].id : "";
-  const options = usable.map((a) => option(a.id, a.name));
+  const options = usable.map((a) => option(a.id, a.name + (a.experimental ? " (experimental)" : "")));
   if (usable.length > 1 && !pick) options.unshift(option("", "Choose an assistant…"));
   if (!usable.length) {
     const needsSignIn = agents.some((a) => a.connected && a.can_organise && a.signed_in === false);
@@ -160,7 +167,10 @@ function showAgents({ agents, chosen }) {
     });
     const what = Object.assign(document.createElement("p"), {
       className: "what",
-      textContent: a.can_organise ? "Can see and manage your tabs, and run Organise with AI." : "Can see and manage your tabs.",
+      textContent: a.id === "claude-desktop"
+        ? "Ask Claude about your tabs in the Claude app (restart it after connecting). The Organise button uses Claude Code instead (see its card)."
+        : (a.can_organise ? "Can see and manage your tabs, and run Organise with AI." : "Can see and manage your tabs.")
+          + (a.model ? ` Organise uses ${a.model} on your own plan.` : "") + (a.experimental ? " Organise is experimental." : ""),
     });
     card.append(Object.assign(document.createElement("h3"), { textContent: a.name }), pill, what);
     if (signedOut && a.can_sign_in) {
@@ -374,6 +384,7 @@ $("hero-hi").addEventListener("click", () => {
   toast("Look up: Kit is in your tab bar.");
 });
 $("hero-organise").addEventListener("click", organise);
+$("undo-btn").addEventListener("click", () => run($("undo-btn"), { cmd: "undo" }));
 $("copy-cmd").addEventListener("click", async () => {
   try {
     await navigator.clipboard.writeText($("install-cmd").textContent);
@@ -392,9 +403,19 @@ document.querySelectorAll(".prompt .copy").forEach((b) => b.addEventListener("cl
   }
 }));
 browser.storage.onChanged.addListener(() => renderSaved());
-// "Open Terminal" for the system this browser runs on.
+function showUndo(label) {
+  $("undo-row").hidden = !label;
+  if (label) $("undo-btn").textContent = `↶ Undo: ${label}`;
+}
+
+// "Open Terminal" and "paste" for the system this browser runs on, and the install line for this
+// exact version of Kit (each release is tagged on GitHub).
 async function showTerminalHow() {
   const { os } = await browser.runtime.getPlatformInfo();
+  $("paste-keys").textContent = os === "mac" ? "⌘ V" : "Ctrl Shift V";
+  $("mac-tools").hidden = os !== "mac";
+  const v = browser.runtime.getManifest().version;
+  $("install-cmd").textContent = `curl -fsSL https://raw.githubusercontent.com/samsamthecodingman/kit-tab-manager/v${v}/install.sh | sh`;
   const how = {
     mac: "Press ⌘ and Space together, type Terminal, and press Return.",
     linux: "Press Ctrl, Alt and T together. (Or open your apps menu and search for Terminal.)",

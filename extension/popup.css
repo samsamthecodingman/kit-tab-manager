@@ -1,13 +1,13 @@
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
-body { margin: 0; width: 300px; background: var(--surface); color: var(--fg); font: 13px/1.4 system-ui, sans-serif; }
+body { margin: 0; width: 310px; background: var(--surface); color: var(--fg); font: 13px/1.4 system-ui, sans-serif; }
 header { display: flex; gap: 10px; align-items: center; padding: 10px 10px 10px 12px; border-bottom: 1px solid var(--line); }
 header .who { flex: 1; min-width: 0; }
 button.avatar { width: auto; padding: 2px; border-radius: 8px; line-height: 0; }
 .head-actions { display: flex; gap: 4px; align-items: center; }
-button.pill { width: auto; display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border-radius: 999px;
-  background: var(--accent); color: var(--accent-fg); font-weight: 600; font-size: 12px; }
-button.pill:hover:not(:disabled) { background: var(--accent); filter: brightness(1.08); }
+button.pill { width: auto; display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 999px;
+  border: 1px solid var(--accent); color: var(--accent-text); font-weight: 600; font-size: 12px; }
+button.pill:hover:not(:disabled) { background: var(--accent-soft); }
 button.icon-btn { width: 28px; height: 28px; padding: 0; display: grid; place-items: center; color: var(--muted); border-radius: 6px; }
 button.icon-btn:hover { color: var(--fg); }
 #kit { width: 34px; height: 30px; image-rendering: pixelated; }
@@ -46,3 +46,12 @@ button.link.inline { padding: 0; font-size: inherit; }
 #status.ok { color: var(--accent-text); }
 #status.bad { color: var(--bad); }
 footer { display: flex; justify-content: space-between; padding: 6px 8px; }
+
+/* Tidy-up buttons show what they'd change, e.g. "8 tabs → 4 groups". */
+button[data-action], #dupes { display: flex; align-items: baseline; gap: 8px; }
+.count { margin-left: auto; color: var(--muted); font-size: 11px; white-space: nowrap; }
+button.undo { margin-top: 4px; color: var(--accent-text); font-weight: 600; }
+.setup-actions { display: flex; align-items: center; gap: 10px; }
+.setup-actions .primary { width: auto; flex: 1; }
+h2 { font-size: 11.5px; }
+.small { font-size: 12px; }

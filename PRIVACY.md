@@ -1,6 +1,6 @@
 # Privacy policy
 
-*Kit: Tab Manager. Last updated 10 October 2026.*
+*Kit: Tab Manager. Last updated 13 October 2026.*
 
 Kit is a browser extension for Firefox, LibreWolf, Floorp, Waterfox and Zen that tidies your tabs, and can let your AI assistant ([Claude Code](https://claude.com/claude-code), running on your own computer) see and organise them. This page explains what Kit can see, where that information goes, and what stays on your computer.
 
@@ -19,7 +19,7 @@ Kit never sees or reads tabs in private windows. It never clicks, types, fills i
 Your tab information leaves your computer only when **you** use an AI assistant:
 
 - When you ask your AI assistant about your tabs, the titles, addresses and any page text it reads become part of your conversation with it. The assistant sends that conversation to its provider to generate replies, under your own account and that provider's privacy policy: for example [Anthropic](https://www.anthropic.com/legal/privacy) for Claude Code, OpenAI for Codex, or Google for Gemini CLI.
-- When you press **Organise with AI** in Kit's menu, Kit starts the assistant you picked (Claude Code, Codex or Hermes Agent) on your computer with only the tools to list and group tabs. It sees your tab titles and addresses (not page text), and that run is sent to that assistant's provider in the same way.
+- When you press **Organise with AI** in Kit's menu, Kit starts the assistant you picked (Claude Code, Codex or Hermes Agent) on your computer with only the tools to list and group tabs. It sees your tab titles and addresses (not page text), and that run is sent to that assistant's provider in the same way. With Claude Code, it uses the Sonnet model under your own Claude account and plan.
 
 Kit's rules, lists and one-click actions (apply my rules, group by website, sort, collapse, close duplicates) run entirely on your computer and send nothing anywhere.
 
@@ -29,7 +29,7 @@ All on your computer:
 
 - Your rules and lists, in Firefox's extension storage.
 - A log of tabs closed through Kit (title and address), in `~/.local/share/tab-bridge/closed.jsonl`, so you can find them again.
-- A log of **Organise with AI** runs (time, your optional request, and the AI's summary), in `~/.local/share/tab-bridge/organise.log`.
+- A log of **Organise with AI** runs (time, which assistant, the optional instruction text you typed, and the assistant's summary and any error output), in `~/.local/share/tab-bridge/organise.log`. If you type something private as an instruction, it's kept there until you delete the file.
 
 You can delete these files at any time. Removing the extension deletes its stored rules and lists.
 

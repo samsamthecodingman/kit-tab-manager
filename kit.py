@@ -22,6 +22,7 @@ import itertools
 import json
 import os
 import re
+import shlex
 import shutil
 import signal
 import socket
@@ -33,7 +34,7 @@ import threading
 import time
 from pathlib import Path
 
-VERSION = "0.9.0"
+VERSION = "0.10.0"  # install.sh's KIT_REF must name this release (v + this VERSION), so the installer fetches this exact file
 REQUEST_TIMEOUT = 60.0
 ORGANISE_TIMEOUT = 300.0
 ORGANISE_MODEL = "sonnet"
@@ -72,7 +73,21 @@ def socket_path() -> str:
 def find_program(name: str) -> str | None:
     """Firefox starts Kit with a sparse PATH, so also look in the usual install places."""
     extra = [str(Path.home() / ".local/bin"), "/usr/local/bin", "/usr/bin"]
-    return shutil.which(name, path=os.pathsep.join([os.environ.get("PATH", ""), *extra]))
+    found = shutil.which(name, path=os.pathsep.join([os.environ.get("PATH", ""), *extra]))
+    return found or (bundled_claude() if name == "claude" else None)
+
+
+def bundled_claude() -> str | None:
+    """The Claude desktop app ships its own Claude Code, so someone with only the app still has one.
+    Used only when no `claude` is on the PATH. Takes the newest version (compared as numbers, so
+    2.1.284 beats 2.1.9)."""
+    home = Path.home()
+    app = home / "Library" / "Application Support" / "Claude" if sys.platform == "darwin" else home / ".config" / "Claude"
+    found = []
+    for binary in (app / "claude-code").glob("*/claude"):
+        if binary.is_file() and os.access(binary, os.X_OK):
+            found.append((tuple(int(n) for n in re.findall(r"\d+", binary.parent.name)), str(binary)))
+    return max(found)[1] if found else None
 
 
 # ---- organise with AI -------------------------------------------------------------------------
@@ -553,6 +568,25 @@ def cli_connect(program: str, adds: list[tuple[str, list[str]]], remove: bool) -
     return ok, ("removed" if remove else "connected") if ok else ("couldn't remove; remove Kit by hand" if remove else "couldn't connect; add Kit by hand")
 
 
+def codex_adds(python: str) -> list:
+    return [(MCP_NAME, ["--", *mcp_entry(python)])]
+
+
+def hermes_adds(python: str) -> list:
+    return [(MCP_NAME, ["--command", python, "--args", *mcp_entry(python)[1:]]),
+            (ORGANISE_MCP_NAME, ["--command", python, "--args", *mcp_entry(python, True)[1:]])]
+
+
+def cli_commands(adds: list, remove: bool) -> list:
+    """The `mcp` arguments cli_connect runs, for --dry-run to show."""
+    return [c for name, add_args in adds for c in [["mcp", "remove", name], *([] if remove else [["mcp", "add", name, *add_args]])]]
+
+
+def claude_commands(python: str, remove: bool) -> list:
+    return [["mcp", "remove", MCP_NAME, "-s", "user"],
+            *([] if remove else [["mcp", "add", "--scope", "user", MCP_NAME, "--", *mcp_entry(python)]])]
+
+
 def claude_connect(python: str, remove: bool) -> tuple[bool, str]:
     claude = find_program("claude")
     run_cli([claude, "mcp", "remove", MCP_NAME, "-s", "user"])  # also replaces older Kit or Tab Bridge setups
@@ -572,10 +606,10 @@ def claude_connected() -> bool:
 
 def json_agent(agent_id: str, name: str, marker: Path, config: Path, sign_in_help: str = "") -> dict:
     return {
-        "id": agent_id, "name": name, "sign_in_help": sign_in_help,
+        "id": agent_id, "name": name, "sign_in_help": sign_in_help, "config": config,
         "installed": marker.is_dir,
         "connected": lambda: json_config_connected(config),
-        "connect": lambda python, remove: (lambda r: (not r.startswith("skipped"), f"{r} ({config})"))(
+        "connect": lambda python, remove: (lambda r: (not r.startswith("skipped"), r))(
             update_config(config, None if remove else {"command": python, "args": mcp_entry(python)[1:]})),
     }
 
@@ -605,17 +639,18 @@ def build_agents() -> list[dict]:
     return [
         {"id": "claude", "name": "Claude Code", "program": "claude", "organise": claude_organise,
          "installed": lambda: bool(find_program("claude")), "connected": claude_connected, "connect": claude_connect,
-         "signed_in": claude_signed_in, "sign_in": ["auth", "login"]},
-        {"id": "codex", "name": "Codex", "program": "codex", "organise": codex_organise,
+         "signed_in": claude_signed_in, "sign_in": ["auth", "login"], "model": ORGANISE_MODEL.capitalize(),
+         "commands": claude_commands},
+        {"id": "codex", "name": "Codex", "program": "codex", "organise": codex_organise, "experimental": True,
+         "commands": lambda python, remove: cli_commands(codex_adds(python), remove),
          "signed_in": codex_signed_in, "sign_in": ["login"],
          "installed": lambda: bool(find_program("codex")), "connected": lambda: cli_connected("codex", MCP_NAME),
-         "connect": lambda python, remove: cli_connect("codex", [(MCP_NAME, ["--", *mcp_entry(python)])], remove)},
-        {"id": "hermes", "name": "Hermes Agent", "program": "hermes", "organise": hermes_organise,
+         "connect": lambda python, remove: cli_connect("codex", codex_adds(python), remove)},
+        {"id": "hermes", "name": "Hermes Agent", "program": "hermes", "organise": hermes_organise, "experimental": True,
+         "commands": lambda python, remove: cli_commands(hermes_adds(python), remove),
          "installed": lambda: bool(find_program("hermes")),
          "connected": lambda: cli_connected("hermes", MCP_NAME, ORGANISE_MCP_NAME),
-         "connect": lambda python, remove: cli_connect("hermes", [
-             (MCP_NAME, ["--command", python, "--args", *mcp_entry(python)[1:]]),
-             (ORGANISE_MCP_NAME, ["--command", python, "--args", *mcp_entry(python, True)[1:]])], remove),
+         "connect": lambda python, remove: cli_connect("hermes", hermes_adds(python), remove),
          "note": "type /reload-mcp in an open Hermes session",
          "sign_in_help": "To choose the AI model Hermes uses, run hermes setup in a terminal."},
         json_agent("gemini", "Gemini CLI", home / ".gemini", home / ".gemini" / "settings.json",
@@ -664,7 +699,9 @@ def agents_status() -> list[dict]:
         out.append({"id": a["id"], "name": a["name"], "installed": installed,
                     "connected": installed and a["connected"](), "can_organise": bool(a.get("organise")),
                     "signed_in": signed_in(a) if installed else None, "can_sign_in": bool(a.get("sign_in")),
-                    "sign_in_help": a.get("sign_in_help", "")})
+                    "sign_in_help": a.get("sign_in_help", ""),
+                    "model": a.get("model"),  # what Organise runs on (shown so it's no surprise), None when it's the assistant's own choice
+                    "experimental": bool(a.get("experimental"))})  # Organise works but isn't tested end to end
     return out
 
 
@@ -689,39 +726,129 @@ def sign_in(agent: dict, interactive: bool = False) -> tuple[bool, str]:
     return False, f"{agent['name']} still isn't signed in. Try again, and finish in the browser tab that opens."
 
 
-def ask(question: str):
+def ask(question: str, default: bool = True):
     """A yes/no question in the terminal, even when this script's input is a pipe (curl | sh).
     None when there's no terminal to ask in."""
     try:
         with open("/dev/tty", "r+") as tty:
-            tty.write(f"{question} [Y/n] ")
+            tty.write(f"{question} {'[Y/n]' if default else '[y/N]'} ")
             tty.flush()
-            return tty.readline().strip().lower() in ("", "y", "yes")
+            answer = tty.readline().strip().lower()
+            return default if not answer else answer in ("y", "yes")
     except OSError:
         return None
 
 
-def register_assistants(python: str, remove: bool = False) -> None:
-    """install.sh: connects (or disconnects) every installed assistant, then offers to sign in to
-    any that need it, so setup ends with everything ready."""
-    found = False
-    for agent in AGENTS:
-        if agent["installed"]():
-            found = True
-            print(f"{agent['name']}: {connect_agent(agent, python, remove)[1]}")
-    if not found and not remove:
-        print("No AI assistants found (Claude Code, Codex, Hermes Agent, Gemini CLI, Cursor, Windsurf, Claude Desktop).")
-    if remove:
+def join_names(names: list[str]) -> str:
+    return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
+
+
+def tilde(path: Path) -> str:
+    home = str(Path.home())
+    return "~" + str(path)[len(home):] if str(path).startswith(home + os.sep) else str(path)
+
+
+def leftovers() -> list[Path]:
+    """What uninstalling leaves behind on purpose: the *.before-kit backups of assistants' settings,
+    and Kit's logs (including the list of tabs closed through Kit)."""
+    found = []
+    for a in AGENTS:
+        if a.get("config"):
+            backup = a["config"].with_name(a["config"].name + ".before-kit")
+            if os.path.lexists(backup):
+                found.append(backup)
+    if os.path.lexists(DATA_DIR):
+        found.append(DATA_DIR)
+    return found
+
+
+def offer_leftovers(dry_run: bool) -> None:
+    found = leftovers()
+    if not found:
         return
-    for agent in AGENTS:
-        if not agent["installed"]() or not agent.get("sign_in") or signed_in(agent) is not False:
-            continue
-        print(f"\n{agent['name']} is connected, but isn't signed in yet, so it can't organise your tabs.")
+    print(f"\nKit {'would leave' if dry_run else 'left'} these behind, in case you want them:")
+    for path in found:
+        print(f"    {tilde(path)}" + ("  (Kit's logs, including tabs closed through Kit)" if path == DATA_DIR else "  (a backup of the settings from before Kit)"))
+    commands = [f"rm -rf {shlex.quote(str(p))}" if p.is_dir() and not p.is_symlink() else f"rm {shlex.quote(str(p))}" for p in found]
+    if dry_run:
+        return
+    answer = ask("Delete these too?", default=False)
+    if answer:
+        for path in found:
+            try:
+                shutil.rmtree(path) if path.is_dir() and not path.is_symlink() else path.unlink()
+            except OSError as exc:
+                print(f"! Couldn't delete {tilde(path)}: {exc}")
+        print("✓ Deleted them")
+        return
+    print("Kept them. To delete them later, run:" if answer is False else "To delete them, run:")
+    for command in commands:
+        print(f"    {command}")
+
+
+def describe_connect(agent: dict, python: str, remove: bool) -> list[str]:
+    """--dry-run: what connecting (or disconnecting) this assistant would change."""
+    if agent.get("config"):
+        config = agent["config"]
+        return [f"{'remove Kit from' if remove else 'add Kit to'} {config} (the original is kept once as {config.name}.before-kit)"]
+    program = find_program(agent["program"]) or agent["program"]
+    return [shlex.join([program, *c]) for c in agent["commands"](python, remove)]
+
+
+def register_assistants(python: str, remove: bool = False, verbose: bool = False, dry_run: bool = False, yes: bool = False) -> None:
+    """install.sh: connects (or disconnects) every installed assistant, then offers to sign in to
+    any that need it, so setup ends with everything ready. Short and friendly unless verbose."""
+    found = [a for a in AGENTS if a["installed"]()]
+    if not found:
+        if not remove:
+            print("! No AI assistants found yet (looked for Claude Code, Codex, Hermes Agent, Gemini CLI, Cursor, Windsurf and Claude Desktop).")
+            print("  Install one and run this again, or connect it later from Kit's full page.")
+        if remove:
+            offer_leftovers(dry_run)
+        return
+    verb = "Disconnect Kit from" if remove else "Connect Kit to"
+    if dry_run:
+        for agent in found:
+            print(f"Would {'disconnect Kit from' if remove else 'connect Kit to'} {agent['name']}:")
+            for line in describe_connect(agent, python, remove):
+                print(f"    {line}")
+        if remove:
+            offer_leftovers(dry_run=True)
+        return
+    if not yes and not remove:  # (uninstalling was already asked for)
+        # Asked once, listing everything found, so nothing is edited without the user knowing which.
+        answer = ask(f"{verb} {join_names([a['name'] for a in found])}?")
+        if answer is None:
+            print("(No terminal to ask on, so going ahead. Use --dry-run first to see what would change.)")
+        elif not answer:
+            print("OK, skipped. Run this again whenever you like, or connect from Kit's full page.")
+            return
+    needs_sign_in = []
+    for agent in found:
+        ok, message = connect_agent(agent, python, remove)
+        name = agent["name"]
+        if not ok:
+            print(f"! {name} couldn't be {'disconnected' if remove else 'connected'}: {re.sub(r'^skipped: ', '', message)}")
+        elif remove:
+            print(f"✓ Disconnected {name}")
+        elif agent.get("sign_in") and signed_in(agent) is False:
+            print(f"! {name} is connected but needs you to sign in")
+            needs_sign_in.append(agent)
+        else:
+            note = f" ({agent['note']})" if agent.get("note") and message.startswith("connected") else ""
+            print(f"✓ {name} ready{note}")
+        if verbose:
+            print(f"    {message}" + (f" ({agent['config']})" if agent.get("config") else ""))
+    if remove:
+        offer_leftovers(dry_run)
+        return
+    for agent in needs_sign_in:
         answer = ask(f"Sign in to {agent['name']} now? It opens your browser.")
         if answer:
-            print(sign_in(agent, interactive=True)[1])
+            ok, message = sign_in(agent, interactive=True)
+            print(f"{'✓' if ok else '!'} {message}")
         else:
-            print(f"{'No problem: you' if answer is False else 'You'} can sign in from Kit's full page: AI assistants, then Sign in.")
+            print("  You can sign in later from Kit's full page: AI assistants, then Sign in.")
 
 
 def main() -> None:
@@ -731,7 +858,14 @@ def main() -> None:
             ALLOWED_TOOLS.intersection_update(ORGANISE_TOOLS)
         run_mcp()
     elif mode in ("register", "unregister"):
-        register_assistants(sys.argv[2] if len(sys.argv) > 2 else sys.executable, remove=mode == "unregister")
+        args = sys.argv[2:]
+        flags = {a for a in args if a.startswith("--")}
+        positional = [a for a in args if not a.startswith("--")]
+        if os.environ.get("KIT_APP_PATH") and "--dry-run" in flags:
+            global SELF  # a dry run from a downloaded copy should show where the real install would live
+            SELF = Path(os.environ["KIT_APP_PATH"])
+        register_assistants(positional[0] if positional else sys.executable, remove=mode == "unregister",
+                            verbose="--verbose" in flags, dry_run="--dry-run" in flags, yes="--yes" in flags)
     elif mode in ("--version", "version"):
         print(f"Kit {VERSION}")
     else:

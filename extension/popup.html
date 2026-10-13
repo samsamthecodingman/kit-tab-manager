@@ -25,8 +25,26 @@
 </header>
 
 <section>
+  <h2>Tidy up</h2>
+  <button data-action="group_by_site">Group loose tabs by website <span class="count" id="n-group_by_site"></span></button>
+  <button data-action="apply_rules">Apply my rules <span class="count" id="n-apply_rules"></span></button>
+  <button data-action="sort_groups">Sort tabs in each group <span class="count" id="n-sort_groups"></span></button>
+  <button data-action="collapse_all">Collapse all groups <span class="count" id="n-collapse_all"></span></button>
+  <button id="dupes">Close duplicate tabs… <span class="count" id="n-dupes"></span></button>
+  <div id="dupe-panel" hidden>
+    <p id="dupe-msg" class="muted"></p>
+    <ul id="dupe-list"></ul>
+    <div class="row">
+      <button id="dupe-close" class="primary">Close them</button>
+      <button id="dupe-cancel">Cancel</button>
+    </div>
+  </div>
+  <button id="undo" class="undo" hidden></button>
+</section>
+
+<section id="ai">
   <h2>Organise with AI</h2>
-  <div id="organise-controls">
+  <div id="organise-controls" hidden>
     <div class="agent-row">
       <label for="agent">With</label>
       <select id="agent" disabled><option value="">Checking assistants…</option></select>
@@ -36,28 +54,15 @@
     <p id="organise-note" class="muted small">It can group, move and rename, but can't close tabs.</p>
   </div>
   <div id="setup-card" class="setup-card" hidden>
-    <p class="setup-title" id="setup-title">Let AI organise your tabs</p>
-    <p class="setup-text" id="setup-text">Kit's tidy-ups below already work. AI needs a one-time setup: paste one line, takes about a minute.</p>
-    <button id="setup" class="primary">Set up AI</button>
-  </div>
-  <div id="result" role="status" hidden></div>
-</section>
-
-<section>
-  <h2>Tidy up</h2>
-  <button data-action="apply_rules">Apply my rules</button>
-  <button data-action="group_by_site">Group loose tabs by website</button>
-  <button data-action="sort_groups">Sort tabs in each group</button>
-  <button data-action="collapse_all">Collapse all groups</button>
-  <button id="dupes">Close duplicate tabs…</button>
-  <div id="dupe-panel" hidden>
-    <p id="dupe-msg" class="muted"></p>
-    <ul id="dupe-list"></ul>
-    <div class="row">
-      <button id="dupe-close" class="primary">Close them</button>
-      <button id="dupe-cancel">Cancel</button>
+    <p class="setup-title" id="setup-title"></p>
+    <p class="setup-text" id="setup-text"></p>
+    <div class="setup-actions">
+      <button id="setup" class="primary"></button>
+      <button id="setup-later" class="link" hidden>Not now</button>
     </div>
   </div>
+  <p id="setup-line" class="small muted" hidden>AI is optional. <button id="setup-show" class="link inline">Set it up</button></p>
+  <div id="result" role="status" hidden></div>
 </section>
 
 <section>

@@ -165,3 +165,6 @@ textarea { display: block; width: 100%; font: inherit; color: inherit; backgroun
   .pulse { animation: none; }
   button, .bubble { transition: none; }
 }
+
+.undo-row { margin-top: 14px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+#mac-tools { margin-top: 14px; }

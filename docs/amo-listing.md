@@ -24,7 +24,7 @@ Kit: Tab Manager
 
 *(250 characters max)*
 
-Tidy your tabs with one-click rules and tidy-ups, and Kit, a pixel fox who walks your tab bar. Connect your AI assistant (Claude Code, Codex, Gemini CLI…) to group and read them too.
+Tidy your tabs with one-click tidy-ups, your own rules and undo, no AI needed, with Kit, a pixel fox who walks your tab bar. Optionally connect an AI assistant (Claude Code, Codex…) to organise them for you.
 
 ## Description
 
@@ -32,19 +32,19 @@ Kit is a tab manager for Firefox, LibreWolf, Floorp, Waterfox and Zen. It tidies
 
 **What you get**
 
-- Tools for your AI assistant (Claude Code, Codex, Gemini CLI, Hermes Agent, Cursor and other MCP apps) to list, group, move, switch to, close and read your tabs.
-- Organise with AI: one button asks the assistant you pick (Claude Code, Codex or Hermes Agent) to sort your tabs into sensible groups, without opening a chat. It only gets the grouping tools, so it can't close tabs or read pages.
-- Your own rules, like "titles containing recipe go in Cooking". Apply them in one click, or have Kit suggest them from your current groups.
-- One-click tidy-ups: group loose tabs by website, sort groups, collapse everything, and close duplicate tabs after showing you which.
+- One-click tidy-ups: group loose tabs by website, sort groups, collapse everything, and close duplicate tabs after showing you which. Each button shows what it will change, and Undo puts things back.
+- Your own rules, like "titles containing recipe go in Cooking". Start from a suggestion, see how many tabs each rule matches, and apply them in one click.
 - Lists: chain steps into your own buttons, like a "Focus mode".
 - A full page that explains every feature, with live counts of your tabs, groups and duplicates.
 - Kit, a little pixel-art fox in a hoodie, walks along your tab bar and says what's changing, on every page. Your theme's colours stay as they are.
+- Optional, with AI: one button asks your AI assistant to sort your tabs into sensible groups, without opening a chat, and shows exactly which groups it made. It only gets the grouping tools, so it can't close tabs or read pages.
+- Optional, with AI: tools for your AI assistant (Claude Code, Codex, Gemini CLI, Hermes Agent, Cursor and other MCP apps) to list, group, move, switch to, close and read your tabs when you ask it to.
 
 **Before you install**
 
-Kit's rules, lists, one-click tidy-ups and tab-bar walks work straight away.
+Everything except the AI features works straight away, on any system: rules, lists, one-click tidy-ups with undo, and Kit's tab-bar walks.
 
-The AI features need Kit's small companion app on Linux or macOS, plus an AI assistant (Organise with AI works with Claude Code, Codex or Hermes Agent). Kit's full page shows the one command that sets it up; details at github.com/samsamthecodingman/kit-tab-manager
+AI is optional. It needs a one-time setup on Mac or Linux (Kit's full page walks you through pasting one line into Terminal) and an AI assistant: Organise with AI works with Claude Code (Codex and Hermes Agent are experimental). If you have the Claude app, Kit can usually use the Claude Code that comes with it; you sign in to it once. Details at github.com/samsamthecodingman/kit-tab-manager
 
 **Privacy**
 

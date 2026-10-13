@@ -213,3 +213,111 @@ esac
     assert kit.sign_in(claude) == (True, "Signed in to Claude Code.")
     assert kit.signed_in(claude) is True
     assert kit.signed_in(kit.AGENTS_BY_ID["cursor"]) is None  # Kit can't tell for apps
+
+
+def test_find_program_falls_back_to_the_claude_apps_bundled_claude_code(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("PATH", str(tmp_path / "bin"))
+    kit = load_kit()
+    monkeypatch.setattr(kit.shutil, "which", lambda name, path=None: None)  # nothing on PATH (or in /usr/bin)
+    assert kit.find_program("claude") is None
+    app = tmp_path / "Library/Application Support/Claude" if sys.platform == "darwin" else tmp_path / ".config/Claude"
+    for version in ("2.1.9", "2.1.284", "2.0.500"):
+        binary = app / "claude-code" / version / "claude"
+        binary.parent.mkdir(parents=True)
+        binary.write_text("#!/bin/sh\n")
+        binary.chmod(0o755)
+    (app / "claude-code" / "3.0.0").mkdir()  # no binary in it: ignored
+    assert kit.find_program("claude") == str(app / "claude-code/2.1.284/claude")  # numeric order, not 2.1.9
+    assert kit.find_program("codex") is None  # only claude has a bundled copy
+    monkeypatch.setattr(kit.shutil, "which", lambda name, path=None: "/opt/bin/claude")
+    assert kit.find_program("claude") == "/opt/bin/claude"  # a claude on PATH wins
+
+
+def test_agents_status_says_which_model_and_what_is_experimental(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    kit = load_kit()
+    monkeypatch.setattr(kit, "find_program", lambda name: None)
+    status = {a["id"]: a for a in kit.agents_status()}
+    assert status["claude"]["model"] == "Sonnet"
+    assert all(a["model"] is None for i, a in status.items() if i != "claude")
+    assert {i for i, a in status.items() if a["experimental"]} == {"codex", "hermes"}
+
+
+def fake_assistants(tmp_path, monkeypatch):
+    """Stand-in Cursor and Claude Desktop folders, and no CLI assistants; returns (kit, cursor config)."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
+    kit = load_kit()
+    monkeypatch.setattr(kit, "find_program", lambda name: None)
+    (tmp_path / ".cursor").mkdir()
+    (tmp_path / ".gemini").mkdir()
+    return kit, tmp_path / ".cursor" / "mcp.json"
+
+
+def test_register_is_short_by_default_and_detailed_when_verbose(tmp_path, monkeypatch, capsys):
+    kit, cursor = fake_assistants(tmp_path, monkeypatch)
+    kit.register_assistants("/usr/bin/python3", yes=True)
+    out = capsys.readouterr().out
+    assert out.splitlines() == ["✓ Gemini CLI ready", "✓ Cursor ready"]
+    assert str(tmp_path) not in out and "mcp" not in out
+    kit.register_assistants("/usr/bin/python3", yes=True, verbose=True)
+    out = capsys.readouterr().out
+    assert f"already connected ({cursor})" in out
+
+
+def test_register_dry_run_changes_nothing(tmp_path, monkeypatch, capsys):
+    kit, cursor = fake_assistants(tmp_path, monkeypatch)
+    kit.register_assistants("/usr/bin/python3", dry_run=True)
+    out = capsys.readouterr().out
+    assert "Would connect Kit to Cursor" in out and str(cursor) in out
+    assert not cursor.exists() and not (tmp_path / ".gemini" / "settings.json").exists()
+
+
+def test_register_asks_once_and_a_no_changes_nothing(tmp_path, monkeypatch, capsys):
+    kit, cursor = fake_assistants(tmp_path, monkeypatch)
+    questions = []
+    monkeypatch.setattr(kit, "ask", lambda q, default=True: questions.append(q) or False)
+    kit.register_assistants("/usr/bin/python3")
+    assert questions == ["Connect Kit to Gemini CLI and Cursor?"]
+    assert not cursor.exists()
+    monkeypatch.setattr(kit, "ask", lambda q, default=True: None)  # no terminal: goes ahead, and says so
+    kit.register_assistants("/usr/bin/python3")
+    assert "No terminal to ask on" in capsys.readouterr().out and cursor.exists()
+
+
+def test_register_only_offers_sign_in_to_assistants_that_connected(tmp_path, monkeypatch, capsys):
+    kit, _ = fake_assistants(tmp_path, monkeypatch)
+    claude = kit.AGENTS_BY_ID["claude"]
+    monkeypatch.setitem(claude, "installed", lambda: True)
+    monkeypatch.setitem(claude, "connect", lambda python, remove: (False, "couldn't update Claude Code"))
+    monkeypatch.setitem(claude, "signed_in", lambda: False)
+    questions = []
+    monkeypatch.setattr(kit, "ask", lambda q, default=True: questions.append(q) or False)
+    kit.register_assistants("/usr/bin/python3", yes=True)
+    out = capsys.readouterr().out
+    assert "! Claude Code couldn't be connected" in out and "sign in" not in out.lower() and not questions
+    monkeypatch.setitem(claude, "connect", lambda python, remove: (True, "connected"))
+    kit.register_assistants("/usr/bin/python3", yes=True)
+    assert "! Claude Code is connected but needs you to sign in" in capsys.readouterr().out
+    assert questions == ["Sign in to Claude Code now? It opens your browser."]
+
+
+def test_unregister_lists_leftovers_and_deletes_only_when_asked(tmp_path, monkeypatch, capsys):
+    kit, cursor = fake_assistants(tmp_path, monkeypatch)
+    kit.register_assistants("/usr/bin/python3", yes=True)
+    backup = cursor.with_name("mcp.json.before-kit")
+    cursor.write_text(json.dumps({"mcpServers": {"firefox-tabs": {"command": "x"}}}))
+    backup.write_text("{}")
+    kit.DATA_DIR.mkdir(parents=True)
+    (kit.DATA_DIR / "organise.log").write_text("")
+    monkeypatch.setattr(kit, "ask", lambda q, default=True: None)  # no terminal: only prints the commands
+    kit.register_assistants("/usr/bin/python3", remove=True, yes=True)
+    out = capsys.readouterr().out
+    assert f"rm {backup}" in out and f"rm -rf {kit.DATA_DIR}" in out and backup.exists() and kit.DATA_DIR.exists()
+    monkeypatch.setattr(kit, "ask", lambda q, default=True: (q == "Delete these too?" and default is False) and False)
+    kit.register_assistants("/usr/bin/python3", remove=True, yes=True)
+    assert backup.exists()  # declined
+    monkeypatch.setattr(kit, "ask", lambda q, default=True: True)
+    kit.register_assistants("/usr/bin/python3", remove=True, yes=True)
+    assert not backup.exists() and not kit.DATA_DIR.exists()

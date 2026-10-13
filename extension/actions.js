@@ -39,6 +39,100 @@ function ruleMatches(rule, tab) {
   return ((rule.field === "url" ? tab.url : tab.title) || "").toLowerCase().includes(needle);
 }
 
+// Group-by-website works per site, not per address: mail.google.com and docs.google.com are both
+// "Google". The site is the last two parts of the host name, or three for addresses like
+// bbc.co.uk and abc.net.au.
+const SECOND_LEVEL = new Set(["co", "com", "net", "org", "gov", "edu", "ac", "or", "ne", "go"]);
+function siteKey(host) {
+  const parts = host.split(".");
+  if (parts.length > 2 && SECOND_LEVEL.has(parts[parts.length - 2]) && parts[parts.length - 1].length === 2) return parts.slice(-3).join(".");
+  return parts.slice(-2).join(".");
+}
+
+const SITE_NAMES = {
+  github: "GitHub", gitlab: "GitLab", youtube: "YouTube", linkedin: "LinkedIn", stackoverflow: "Stack Overflow",
+  reddit: "Reddit", wikipedia: "Wikipedia", chatgpt: "ChatGPT", openai: "OpenAI", paypal: "PayPal",
+  ebay: "eBay", bbc: "BBC", nytimes: "NY Times", stackexchange: "Stack Exchange", whatsapp: "WhatsApp",
+};
+function siteName(key) {
+  const label = key.split(".")[0];
+  return SITE_NAMES[label] || (/^\d/.test(label) ? key : label.charAt(0).toUpperCase() + label.slice(1));
+}
+
+// What a tidy-up would do, without doing it: for the counts on the menu's buttons.
+async function previews(windowId) {
+  const tabs = (await browser.tabs.query({ windowId })).filter((t) => !t.pinned);
+  const { rules } = await loadSettings();
+  const loose = tabs.filter((t) => t.groupId === -1);
+  const bySite = new Map();
+  for (const t of loose) {
+    const host = hostOf(t.url);
+    if (!host || !/^https?:/.test(t.url)) continue;
+    const key = siteKey(host);
+    bySite.set(key, (bySite.get(key) || 0) + 1);
+  }
+  const siteGroups = [...bySite.values()].filter((n) => n >= 2);
+  const groups = await browser.tabGroups.query({ windowId });
+  return {
+    apply_rules: loose.filter((t) => rules.some((r) => r.group && ruleMatches(r, t))).length,
+    group_by_site: { tabs: siteGroups.reduce((a, b) => a + b, 0), groups: siteGroups.length },
+    groups: groups.length,
+    expanded: groups.filter((g) => !g.collapsed).length,
+    duplicates: (await findDuplicates(windowId)).length,
+  };
+}
+
+// Undo for the last tidy-up, list or organise: a snapshot of which group every tab was in, the
+// groups' names, colours and collapsed state, and the tab order. Closed tabs can't come back this
+// way (History > Recently Closed Tabs can), so closing clears it.
+const Undo = { snap: null };
+
+async function snapshot(windowId, label) {
+  const [tabs, groups] = await Promise.all([browser.tabs.query({ windowId }), browser.tabGroups.query({ windowId })]);
+  Undo.snap = {
+    windowId, label, at: Date.now(),
+    tabs: tabs.map((t) => ({ id: t.id, groupId: t.groupId, index: t.index, pinned: t.pinned })),
+    groups: groups.map((g) => ({ id: g.id, title: g.title, color: g.color, collapsed: g.collapsed })),
+  };
+}
+
+async function undoLast() {
+  const snap = Undo.snap;
+  if (!snap) throw new Error("Nothing to undo");
+  Undo.snap = null;
+  const { windowId } = snap;
+  const open = new Map((await browser.tabs.query({ windowId })).map((t) => [t.id, t]));
+  const tabs = snap.tabs.filter((t) => open.has(t.id) && !t.pinned);
+  // Out of every group first, then back into the old ones (re-made if they were removed).
+  const grouped = tabs.filter((t) => open.get(t.id).groupId !== -1).map((t) => t.id);
+  if (grouped.length) await browser.tabs.ungroup(grouped);
+  const liveGroups = new Set((await browser.tabGroups.query({ windowId })).map((g) => g.id));
+  for (const g of snap.groups) {
+    const ids = tabs.filter((t) => t.groupId === g.id).map((t) => t.id);
+    if (!ids.length) continue;
+    const gid = await browser.tabs.group(liveGroups.has(g.id) ? { tabIds: ids, groupId: g.id } : { tabIds: ids, createProperties: { windowId } });
+    await browser.tabGroups.update(gid, { title: g.title, color: g.color });
+  }
+  for (const t of [...tabs].sort((a, b) => a.index - b.index)) {
+    try { await browser.tabs.move(t.id, { index: t.index }); } catch (e) { /* the window changed shape; best effort */ }
+  }
+  // Moving can pull a tab into a neighbouring group; put strays back, then restore collapsed states.
+  const now = await browser.tabs.query({ windowId });
+  const byTitle = new Map((await browser.tabGroups.query({ windowId })).map((g) => [g.title, g.id]));
+  for (const t of tabs) {
+    const want = t.groupId === -1 ? -1 : byTitle.get((snap.groups.find((g) => g.id === t.groupId) || {}).title);
+    const cur = now.find((x) => x.id === t.id);
+    if (!cur || want === undefined || cur.groupId === want) continue;
+    if (want === -1) await browser.tabs.ungroup([t.id]);
+    else await browser.tabs.group({ tabIds: [t.id], groupId: want });
+  }
+  for (const g of snap.groups) {
+    const gid = byTitle.get(g.title);
+    if (gid !== undefined) await browser.tabGroups.update(gid, { collapsed: g.collapsed }).catch(() => {});
+  }
+  return `Undid ${snap.label.toLowerCase()}`;
+}
+
 async function focusedWindowId() {
   return (await browser.windows.getLastFocused({ windowTypes: ["normal"] })).id;
 }
@@ -53,11 +147,6 @@ async function intoGroup(windowId, title, color, tabIds) {
   const existing = groups.find((g) => (g.title || "").toLowerCase() === title.toLowerCase());
   if (existing) return HANDLERS.group_tabs({ tab_ids: tabIds, group_id: existing.id });
   return HANDLERS.group_tabs({ tab_ids: tabIds, title, color: GROUP_COLORS.includes(color) ? color : undefined });
-}
-
-async function groupTitles(windowId) {
-  const groups = await browser.tabGroups.query({ windowId });
-  return new Map(groups.map((g) => [g.id, (g.title || "").toLowerCase()]));
 }
 
 // Runs fn with Kit out in the tab bar; fn returns the text Kit says when done.
@@ -77,20 +166,19 @@ const ACTIONS = {
   async apply_rules(windowId) {
     const { rules } = await loadSettings();
     if (!rules.length) return "No rules yet";
-    const tabs = (await browser.tabs.query({ windowId })).filter((t) => !t.pinned);
-    const titles = await groupTitles(windowId);
+    // Only loose tabs: a tab you've put in a group yourself stays where you put it.
+    const tabs = (await browser.tabs.query({ windowId })).filter((t) => !t.pinned && t.groupId === -1);
     const buckets = new Map();
     for (const tab of tabs) {
       const rule = rules.find((r) => r.group && ruleMatches(r, tab));
       if (!rule) continue;
       const key = rule.group.trim().toLowerCase();
-      if (tab.groupId !== -1 && titles.get(tab.groupId) === key) continue; // already there
       if (!buckets.has(key)) buckets.set(key, { title: rule.group.trim(), color: rule.color, ids: [] });
       buckets.get(key).ids.push(tab.id);
     }
     let moved = 0;
     for (const b of buckets.values()) { await intoGroup(windowId, b.title, b.color, b.ids); moved += b.ids.length; }
-    return moved ? `Sorted ${plural(moved, "tab")}` : "Already tidy";
+    return moved ? `Sorted ${plural(moved, "tab")}` : "No loose tabs match your rules";
   },
 
   async group_by_site(windowId) {
@@ -99,40 +187,47 @@ const ACTIONS = {
     for (const t of tabs) {
       const host = hostOf(t.url);
       if (!host || !/^https?:/.test(t.url)) continue;
-      if (!bySite.has(host)) bySite.set(host, []);
-      bySite.get(host).push(t.id);
+      const key = siteKey(host);
+      if (!bySite.has(key)) bySite.set(key, []);
+      bySite.get(key).push(t.id);
     }
-    let made = 0;
-    for (const [host, ids] of bySite) {
+    let made = 0, grouped = 0;
+    for (const [key, ids] of bySite) {
       if (ids.length < 2) continue;
-      const hash = [...host].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
-      await intoGroup(windowId, host, GROUP_COLORS[hash % GROUP_COLORS.length], ids);
+      const hash = [...key].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
+      await intoGroup(windowId, siteName(key), GROUP_COLORS[hash % GROUP_COLORS.length], ids);
       made++;
+      grouped += ids.length;
     }
-    return made ? `Made ${plural(made, "site group")}` : "No sites with 2+ loose tabs";
+    return made ? `Grouped ${plural(grouped, "tab")} into ${plural(made, "site group")}` : "No site has 2 or more loose tabs";
   },
 
   async sort_groups(windowId) {
     const groups = await browser.tabGroups.query({ windowId });
+    if (!groups.length) return "No groups to sort";
+    let changed = 0;
     for (const g of groups) {
       const tabs = (await browser.tabs.query({ windowId, groupId: g.id })).sort((a, b) => a.index - b.index);
       const sorted = [...tabs].sort((a, b) => (a.title || "").localeCompare(b.title || "", undefined, { numeric: true }));
       if (sorted.every((t, i) => t.id === tabs[i].id)) continue;
+      changed++;
       await browser.tabs.move(sorted.map((t) => t.id), { index: tabs[0].index });
       const strays = (await Promise.all(sorted.map((t) => browser.tabs.get(t.id)))).filter((t) => t.groupId !== g.id);
       if (strays.length) await browser.tabs.group({ tabIds: strays.map((t) => t.id), groupId: g.id });
     }
-    return `Sorted ${plural(groups.length, "group")}`;
+    return changed ? `Sorted ${plural(changed, "group")}` : "Already in order";
   },
 
   async collapse_all(windowId, except = "") {
     const keep = except.trim().toLowerCase();
     const groups = await browser.tabGroups.query({ windowId });
+    if (!groups.length) return "No groups to collapse";
+    let changed = 0;
     for (const g of groups) {
       const collapse = !keep || (g.title || "").toLowerCase() !== keep;
-      if (g.collapsed !== collapse) await HANDLERS.update_group({ group_id: g.id, collapsed: collapse });
+      if (g.collapsed !== collapse) { await HANDLERS.update_group({ group_id: g.id, collapsed: collapse }); changed++; }
     }
-    return "Collapsed";
+    return changed ? `Collapsed ${plural(changed, "group")}` : "Already collapsed";
   },
 
   async expand_group(windowId, name = "") {
@@ -247,6 +342,7 @@ function organiseWithClaude(instructions = "", requestedAgent = "") {
       windowId = await focusedWindowId();
       agentName = ((await agentList()).find((a) => a.id === agent) || {}).name || "";
       before = await groupSnapshot(windowId).catch(() => []);
+      await snapshot(windowId, "Organise with AI").catch(() => {});
       if (!port) throw new Error("Kit's companion app isn't running.");
       port.postMessage({ type: "organise", run_id: run.run_id, agent, instructions: String(instructions).slice(0, 500) });
     } catch (e) {
@@ -348,8 +444,14 @@ async function runList(index, name) {
   const list = sameName(lists[index]) ? lists[index] : lists.find(sameName);
   if (!list) throw new Error("that list no longer exists");
   const windowId = await focusedWindowId();
+  // Check before changing anything, rather than stopping halfway.
+  if ((list.steps || []).some((s) => s.type === "organise_with_claude") && !bridgeReady) {
+    throw new Error(`${list.name || "This list"} has an Organise with AI step, which needs AI set up (see Kit's full page).`);
+  }
+  await snapshot(windowId, list.name || "your list");
   return withKit(windowId, `Running ${list.name || "your list"}`, async () => {
     for (const step of list.steps || []) {
+      if (step.type === "close_duplicates") Undo.snap = null; // closed tabs can't be undone here
       if (step.type === "collapse_all_except") await ACTIONS.collapse_all(windowId, step.arg || "");
       else if (step.type === "organise_with_claude") await organiseWithClaude(step.arg || "");
       else if (ACTIONS[step.type]) await ACTIONS[step.type](windowId, STEP_TYPES[step.type] && STEP_TYPES[step.type].arg ? step.arg || "" : "");
@@ -366,7 +468,18 @@ browser.runtime.onMessage.addListener(async (msg) => {
         connected: bridgeReady,
         lists: (await loadSettings()).lists.map((l) => l.name || "Untitled list"),
         organise: { running: !!Organiser.running, last: Organiser.last },
+        undo: Undo.snap && Undo.snap.windowId === windowId ? Undo.snap.label : null,
       };
+    case "previews":
+      return previews(windowId);
+    case "undo": {
+      const label = Undo.snap ? Undo.snap.label : "";
+      return withKit(Undo.snap ? Undo.snap.windowId : windowId, `Undoing ${label.toLowerCase()}`, undoLast);
+    }
+    case "rule_counts": {
+      const tabs = (await browser.tabs.query({ windowId })).filter((t) => !t.pinned);
+      return (Array.isArray(msg.rules) ? msg.rules : []).map((r) => (r && r.group ? tabs.filter((t) => ruleMatches(r, t)).length : 0));
+    }
     case "dismiss_result":
       Organiser.last = null;
       return null;
@@ -387,6 +500,10 @@ browser.runtime.onMessage.addListener(async (msg) => {
       if (!reply) throw new Error("Kit's companion app isn't running.");
       if (Array.isArray(reply.agents)) { Agents.list = reply.agents; Agents.at = Date.now(); }
       if (!reply.result.ok) throw new Error(reply.result.message);
+      if (msg.cmd === "sign_in") { // the menu has usually closed by now, so Kit says it
+        const [tab] = await browser.tabs.query({ active: true, windowId: await focusedWindowId() });
+        if (tab) { Mascot.begin(tab.windowId, reply.result.message); Mascot.end(true, "Ready to organise"); }
+      }
       return { agents: Agents.list || [], message: reply.result.message };
     }
     case "hi": {
@@ -396,6 +513,8 @@ browser.runtime.onMessage.addListener(async (msg) => {
     }
     case "action":
       if (!Object.prototype.hasOwnProperty.call(ACTIONS, msg.action)) throw new Error("unknown action");
+      if (msg.action === "close_duplicates") Undo.snap = null;
+      else await snapshot(windowId, STEP_TYPES[msg.action] ? STEP_TYPES[msg.action].label : "tidy-up");
       return withKit(windowId, ACTION_LABELS[msg.action], () => ACTIONS[msg.action](windowId, msg.arg || ""));
     case "find_duplicates":
       return findDuplicates(windowId);
@@ -410,6 +529,7 @@ browser.runtime.onMessage.addListener(async (msg) => {
       };
     }
     case "close_tabs":
+      Undo.snap = null;
       return withKit(windowId, `Closing ${plural(msg.tab_ids.length, "tab")}`, async () => {
         await HANDLERS.close_tabs({ tab_ids: msg.tab_ids });
         return `Closed ${plural(msg.tab_ids.length, "tab")}`;

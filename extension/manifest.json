@@ -1,8 +1,8 @@
 {
   "manifest_version": 2,
   "name": "Kit: Tab Manager",
-  "version": "0.9.0",
-  "description": "Tidy your tabs with rules, lists and one-click tidy-ups, or let your AI assistant (Claude Code today) sort them. It never clicks, types or submits anything.",
+  "version": "0.10.0",
+  "description": "Tidy your tabs with rules, lists and one-click tidy-ups, no AI needed. Optionally, connect an AI assistant (Claude Code, Codex and others) to organise them. Never clicks, types or submits anything.",
   "homepage_url": "https://github.com/samsamthecodingman/kit-tab-manager",
   "icons": {
     "48": "icons/kit-48.png",
@@ -37,6 +37,12 @@
       "actions.js"
     ],
     "persistent": true
+  },
+  "commands": {
+    "_execute_browser_action": {
+      "suggested_key": { "default": "Alt+Shift+K" },
+      "description": "Open Kit's menu"
+    }
   },
   "browser_action": {
     "default_title": "Kit: Tab Manager",

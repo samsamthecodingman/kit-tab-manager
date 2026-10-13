@@ -16,12 +16,17 @@
 
   <header class="page-head">
     <h1>Rules &amp; lists</h1>
-    <p class="muted">Changes save automatically. <span id="saved" role="status"></span></p>
+    <p class="muted">Changes save automatically. <span id="saved" role="status" aria-live="polite"></span></p>
   </header>
 
   <section>
     <h2>Grouping rules</h2>
-    <p class="muted">"Apply my rules" puts each tab into the group of the first rule it matches. Tabs that match no rule stay where they are.</p>
+    <p class="muted">"Apply my rules" moves tabs into groups. The first matching rule wins, and rules only move tabs that aren't already in a group.</p>
+    <dl class="match-help">
+      <dt>Title contains</dt><dd>words that appear in the tab's title</dd>
+      <dt>Address contains</dt><dd>anything in the web address, like /docs/</dd>
+      <dt>Website is</dt><dd>a site like github.com, including its subdomains. You can paste a full address.</dd>
+    </dl>
     <div id="rules"></div>
     <div class="actions">
       <button id="add-rule" class="primary">Add rule</button>
@@ -35,6 +40,16 @@
     <div id="lists"></div>
     <div class="actions">
       <button id="add-list" class="primary">Add list</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Back up or share</h2>
+    <p class="muted">Save your rules and lists to a file, or load them from one. Importing replaces what you have now.</p>
+    <div class="actions">
+      <button id="export">Export</button>
+      <button id="import">Import</button>
+      <input type="file" id="import-file" accept="application/json,.json" hidden aria-label="Choose a rules file to import">
     </div>
   </section>
 </main>
