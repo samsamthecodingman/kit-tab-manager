@@ -350,9 +350,11 @@ const Mascot = {
   async start(method, params) {
     try {
       const windowId = await targetWindow(params);
-      if (windowId !== null) this.begin(windowId, await describe(method, params));
+      if (windowId === null) return false;
+      this.begin(windowId, await describe(method, params));
+      return true;
     } catch (e) {
-      // cosmetic only
+      return false; // cosmetic only
     }
   },
 

@@ -24,7 +24,7 @@ function connect() {
     const { id, method, params } = msg || {};
     const handler = Object.prototype.hasOwnProperty.call(HANDLERS, method) ? HANDLERS[method] : null;
     const animated = handler && ANIMATED.has(method);
-    if (animated) await Mascot.start(method, params || {});
+    const began = animated && (await Mascot.start(method, params || {})); // false when Kit had nowhere to walk
     let ok = false;
     try {
       if (!handler) throw new Error(`unknown method ${method}`);
@@ -33,7 +33,7 @@ function connect() {
     } catch (e) {
       reply({ id, error: String((e && e.message) || e) });
     } finally {
-      if (animated) Mascot.end(ok);
+      if (began) Mascot.end(ok);
     }
   });
   port.onDisconnect.addListener(() => {

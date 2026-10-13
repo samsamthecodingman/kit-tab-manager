@@ -58,6 +58,25 @@ Finish with one short sentence (under 25 words) saying what you changed, written
 Kit already shows the groups you made, so don't list every tab."""
 
 
+LOG_LIMIT = 1_000_000  # bytes; a longer log keeps only its newest half
+
+
+def private_log(path: Path):
+    """Opens one of Kit's logs for appending, readable only by you (it holds tab titles and
+    addresses), trimming it to its newest half once it passes LOG_LIMIT."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    os.chmod(path.parent, 0o700)
+    try:
+        if path.stat().st_size > LOG_LIMIT:
+            keep = path.read_bytes()[-LOG_LIMIT // 2:]
+            path.write_bytes(keep[keep.find(b"\n") + 1:])
+    except FileNotFoundError:
+        pass
+    fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+    os.chmod(path, 0o600)
+    return os.fdopen(fd, "a")
+
+
 def socket_path() -> str:
     runtime = os.environ.get("XDG_RUNTIME_DIR")
     base = runtime or f"/tmp/tab-bridge-{os.getuid()}"
@@ -66,14 +85,16 @@ def socket_path() -> str:
     # or another user could put their own socket there and see what Kit sends.
     st = os.stat(base)
     if not runtime and (st.st_uid != os.getuid() or st.st_mode & 0o077):
-        raise SystemExit(f"Kit won't use {base}: it belongs to someone else or others can open it.")
+        raise RuntimeError(f"Kit won't use {base}: it belongs to someone else or others can open it.")
     return os.path.join(base, "tab-bridge.sock")
 
 
 def find_program(name: str) -> str | None:
     """Firefox starts Kit with a sparse PATH, so also look in the usual install places."""
     extra = [str(Path.home() / ".local/bin"), "/usr/local/bin", "/usr/bin"]
-    found = shutil.which(name, path=os.pathsep.join([os.environ.get("PATH", ""), *extra]))
+    # Empty PATH entries would mean "the current folder"; never pick a program up from there.
+    dirs = [d for d in os.environ.get("PATH", "").split(os.pathsep) if d] + extra
+    found = shutil.which(name, path=os.pathsep.join(dirs))
     return found or (bundled_claude() if name == "claude" else None)
 
 
@@ -145,7 +166,7 @@ def run_organise(agent_id: str, instructions: str, prompt: str | None = None) ->
         summary = summary or (f"{name} finished without a summary." if ok else f"{name} stopped with exit code {proc.returncode}.")
         if not ok and re.search(r"/login|not logged in|log ?in|sign ?in|authenticat|api key", f"{summary}\n{detail}", re.I):
             summary = f"{name} isn't signed in. Open Kit's full page and press Sign in next to {name}."
-    with (DATA_DIR / "organise.log").open("a") as log:
+    with private_log(DATA_DIR / "organise.log") as log:
         log.write(json.dumps({"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), "agent": agent_id, "ok": ok,
                               "instructions": instructions, "summary": summary, "detail": detail}) + "\n")
     return ok, summary[:1500]
@@ -323,8 +344,7 @@ def bridge_call(method: str, params: dict):
 
 def close_tabs(args: dict):
     result = bridge_call("close_tabs", args)
-    CLOSED_LOG.parent.mkdir(parents=True, exist_ok=True)
-    with CLOSED_LOG.open("a") as f:
+    with private_log(CLOSED_LOG) as f:
         for t in (result or {}).get("closed", []):
             f.write(json.dumps({"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), **t}) + "\n")
     return result
@@ -714,7 +734,9 @@ def sign_in(agent: dict, interactive: bool = False) -> tuple[bool, str]:
     cmd = [program, *agent["sign_in"]]
     try:
         if interactive:
-            subprocess.run(cmd, timeout=SIGN_IN_TIMEOUT)
+            # Under curl | sh our stdin is the script itself, so sign-in reads from the terminal.
+            with open("/dev/tty") as tty:
+                subprocess.run(cmd, timeout=SIGN_IN_TIMEOUT, stdin=tty)
         else:
             run_in_own_group(cmd, Path.home(), SIGN_IN_TIMEOUT)
     except subprocess.TimeoutExpired:
@@ -733,9 +755,12 @@ def ask(question: str, default: bool = True):
         with open("/dev/tty", "r+") as tty:
             tty.write(f"{question} {'[Y/n]' if default else '[y/N]'} ")
             tty.flush()
-            answer = tty.readline().strip().lower()
+            line = tty.readline()
+            if not line:  # Ctrl-D: take that as no
+                return False
+            answer = line.strip().lower()
             return default if not answer else answer in ("y", "yes")
-    except OSError:
+    except (OSError, UnicodeDecodeError):
         return None
 
 
@@ -860,6 +885,9 @@ def main() -> None:
     elif mode in ("register", "unregister"):
         args = sys.argv[2:]
         flags = {a for a in args if a.startswith("--")}
+        unknown = flags - {"--verbose", "--dry-run", "--yes"}
+        if unknown:  # a typo like --dryrun must not run for real
+            raise SystemExit(f"Unknown option {', '.join(sorted(unknown))}. Options: --verbose, --dry-run, --yes")
         positional = [a for a in args if not a.startswith("--")]
         if os.environ.get("KIT_APP_PATH") and "--dry-run" in flags:
             global SELF  # a dry run from a downloaded copy should show where the real install would live

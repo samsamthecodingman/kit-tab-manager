@@ -22,11 +22,20 @@ set -eu
 # Bump this with each release, to the same version as extension/manifest.json (and VERSION in kit.py).
 KIT_REF="${KIT_REF:-v0.10.0}"
 REPO_RAW="https://raw.githubusercontent.com/samsamthecodingman/kit-tab-manager/$KIT_REF"
-# Downloads kit.py for this release, or the latest one if the release isn't tagged yet.
+# Downloads kit.py for this release into $1 (via a temporary file, so a failed download can't
+# break a working copy), or the latest one if the release isn't tagged yet, and checks it runs.
 get_kit() {
-  curl -fsSL "$REPO_RAW/kit.py" -o "$1" 2>/dev/null ||
-    curl -fsSL "https://raw.githubusercontent.com/samsamthecodingman/kit-tab-manager/master/kit.py" -o "$1" ||
-    fail "couldn't download kit.py from GitHub."
+  part="$1.part"
+  if curl -fsSL "$REPO_RAW/kit.py" -o "$part" 2>/dev/null; then
+    :
+  elif curl -fsSL "https://raw.githubusercontent.com/samsamthecodingman/kit-tab-manager/master/kit.py" -o "$part"; then
+    say "(Release ${KIT_REF} isn't on GitHub yet, so using the latest kit.py.)"
+  else
+    rm -f "$part"
+    fail "couldn't download kit.py from GitHub. Check your internet connection and try again."
+  fi
+  "$PYTHON" "$part" --version >/dev/null 2>&1 || { rm -f "$part"; fail "the downloaded kit.py doesn't run. Try again in a minute."; }
+  mv "$part" "$1"
 }
 EXTENSION_ID="tab-bridge@samroberts.local"
 HOST_NAME="tab_bridge"
@@ -91,7 +100,13 @@ if [ "$UNINSTALL" = 1 ]; then
   if [ "$DRY" = 1 ]; then
     say "(Dry run: nothing will be changed.)"
     browser_dirs | while IFS='|' read -r name dir; do say "Would remove $dir/$HOST_NAME.json ($name)"; done
-    if [ -f "$APP_DIR/kit.py" ]; then python3 "$APP_DIR/kit.py" unregister $KIT_FLAGS || true; fi
+    # Only Kit 0.10 and newer understand --dry-run; an older kit.py would really disconnect everything.
+    if [ -f "$APP_DIR/kit.py" ] && python3 "$APP_DIR/kit.py" --version 2>/dev/null |
+        python3 -c 'import sys, re; v = re.findall(r"\d+", sys.stdin.read()); sys.exit(not v or tuple(map(int, v[:2])) < (0, 10))'; then
+      python3 "$APP_DIR/kit.py" unregister $KIT_FLAGS || true
+    else
+      say "Would disconnect Kit from your AI assistants"
+    fi
     say "Would delete $APP_DIR"
     exit 0
   fi
@@ -125,6 +140,7 @@ for p in $SYSTEM_PY /usr/local/bin/python3 /opt/homebrew/bin/python3 "$(command 
   if [ -n "$p" ] && [ -x "$p" ] && "$p" -c 'import sys; sys.exit(sys.version_info < (3, 8))' 2>/dev/null; then PYTHON="$p"; break; fi
 done
 if [ -z "$PYTHON" ] && [ "$NEED_TOOLS" = 1 ]; then
+  [ "$DRY" = 1 ] && fail "Kit needs Python, and this Mac doesn't have it yet. Without --dry-run, Kit would open macOS's \"developer tools\" installer."
   xcode-select --install >/dev/null 2>&1 || true # opens macOS's own installer window
   fail "Kit needs Python, and this Mac doesn't have it yet. macOS may now ask to install \"developer tools\": click Install, wait for it to finish, then run the same line again."
 fi
