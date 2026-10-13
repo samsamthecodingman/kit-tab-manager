@@ -436,7 +436,8 @@ $("version").textContent = `Version ${browser.runtime.getManifest().version}.`;
   showTerminalHow();
   await Promise.all([renderSaved(), refreshStatus(), refreshOverview()]);
   // #welcome: opened right after installing Kit.
-  if (location.hash === "#welcome") toast(aiConnected ? "Kit is ready. Say hi!" : "Welcome! Kit's tidy-ups work now; setting up AI takes a minute.");
-  if ((location.hash === "#connect" || location.hash === "#welcome") && !aiConnected) $("connect").scrollIntoView({ block: "start" });
+  // #welcome: opened right after installing Kit. Start at the top, so the intro comes first.
+  if (location.hash === "#welcome") toast(aiConnected ? "Kit is ready. Say hi!" : "Welcome! Everything here works now. AI is optional: see Set up AI further down.");
+  if (location.hash === "#connect" && !aiConnected) $("connect").scrollIntoView({ block: "start" });
   if (location.hash === "#assistants" && aiConnected) $("assistants").scrollIntoView({ block: "start" });
 })().catch((e) => toast(String((e && e.message) || e), true));

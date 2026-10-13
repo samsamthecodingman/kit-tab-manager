@@ -143,7 +143,7 @@ async function showCounts() {
   try { p = await send({ cmd: "previews" }); } catch (e) { return; }
   const set = (id, text) => ($(id).textContent = text);
   set("n-group_by_site", p.group_by_site.groups ? `${p.group_by_site.tabs} tabs → ${p.group_by_site.groups} groups` : "nothing to group");
-  set("n-apply_rules", p.apply_rules ? `${p.apply_rules} tab${p.apply_rules === 1 ? "" : "s"}` : "");
+  set("n-apply_rules", !p.rules ? "no rules yet" : p.apply_rules ? `${p.apply_rules} tab${p.apply_rules === 1 ? "" : "s"}` : "");
   set("n-sort_groups", p.groups ? `${p.groups} group${p.groups === 1 ? "" : "s"}` : "no groups");
   set("n-collapse_all", p.expanded ? `${p.expanded} open` : "");
   set("n-dupes", p.duplicates ? String(p.duplicates) : "none");

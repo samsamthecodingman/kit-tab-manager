@@ -74,6 +74,7 @@ async function previews(windowId) {
   const siteGroups = [...bySite.values()].filter((n) => n >= 2);
   const groups = await browser.tabGroups.query({ windowId });
   return {
+    rules: rules.length,
     apply_rules: loose.filter((t) => rules.some((r) => r.group && ruleMatches(r, t))).length,
     group_by_site: { tabs: siteGroups.reduce((a, b) => a + b, 0), groups: siteGroups.length },
     groups: groups.length,
