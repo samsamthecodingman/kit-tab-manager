@@ -13,29 +13,38 @@
 #   --yes        don't ask before connecting your AI assistants
 #
 # It needs python3 (already on most Linux and macOS systems) and changes only files in your home folder:
-#   - kit.py and a small launcher in Kit's folder (see APP_DIR below)
+#   - kit.py, kit_mcp.py (what AI assistants run) and a small launcher in Kit's folder (see APP_DIR below)
 #   - the native messaging registration for Kit, for Firefox and each Firefox-based browser found
 #   - the MCP server lists of the AI assistants it finds (Claude Code, Codex, Hermes Agent, Gemini CLI, Cursor, ...)
 set -eu
 
 # The release to download kit.py from, so a release's installer always fetches that release's kit.py.
 # Bump this with each release, to the same version as extension/manifest.json (and VERSION in kit.py).
-KIT_REF="${KIT_REF:-v0.10.0}"
+KIT_REF="${KIT_REF:-v0.10.1}"
 REPO_RAW="https://raw.githubusercontent.com/samsamthecodingman/kit-tab-manager/$KIT_REF"
-# Downloads kit.py for this release into $1 (via a temporary file, so a failed download can't
-# break a working copy), or the latest one if the release isn't tagged yet, and checks it runs.
-get_kit() {
-  part="$1.part"
-  if curl -fsSL "$REPO_RAW/kit.py" -o "$part" 2>/dev/null; then
+LATEST_RAW="https://raw.githubusercontent.com/samsamthecodingman/kit-tab-manager/master"
+# Downloads one of Kit's files ($1: kit.py or kit_mcp.py) for this release into $2, via a temporary
+# file so a failed download can't break a working copy, and checks it's valid Python. If the release
+# isn't tagged yet, both files come from the latest code instead, so they always match.
+FROM="$REPO_RAW"
+get_file() {
+  part="$2.part"
+  if curl -fsSL "$FROM/$1" -o "$part" 2>/dev/null; then
     :
-  elif curl -fsSL "https://raw.githubusercontent.com/samsamthecodingman/kit-tab-manager/master/kit.py" -o "$part"; then
-    say "(Release ${KIT_REF} isn't on GitHub yet, so using the latest kit.py.)"
+  elif [ "$FROM" = "$REPO_RAW" ] && curl -fsSL "$LATEST_RAW/$1" -o "$part"; then
+    FROM="$LATEST_RAW"
+    say "(Release ${KIT_REF} isn't on GitHub yet, so using the latest version.)"
   else
     rm -f "$part"
-    fail "couldn't download kit.py from GitHub. Check your internet connection and try again."
+    fail "couldn't download $1 from GitHub. Check your internet connection and try again."
   fi
-  "$PYTHON" "$part" --version >/dev/null 2>&1 || { rm -f "$part"; fail "the downloaded kit.py doesn't run. Try again in a minute."; }
-  mv "$part" "$1"
+  "$PYTHON" -c 'import ast, sys; ast.parse(open(sys.argv[1]).read())' "$part" 2>/dev/null ||
+    { rm -f "$part"; fail "the downloaded $1 isn't complete. Try again in a minute."; }
+  mv "$part" "$2"
+}
+get_kit() { # $1: Kit's folder
+  get_file kit.py "$1/kit.py"
+  get_file kit_mcp.py "$1/kit_mcp.py"
 }
 EXTENSION_ID="tab-bridge@samroberts.local"
 HOST_NAME="tab_bridge"
@@ -153,7 +162,7 @@ vsay "$("$PYTHON" --version 2>&1) at $PYTHON"
 # From a copy of the repo, use its kit.py. Piped from curl, $0 is just "sh", so download instead
 # (rather than picking up some other kit.py in the current folder).
 HERE="$(cd "$(dirname "$0")" 2>/dev/null && pwd || true)"
-if [ -f "$0" ] && [ -n "$HERE" ] && [ -f "$HERE/kit.py" ] && [ -f "$HERE/extension/manifest.json" ]; then
+if [ -f "$0" ] && [ -n "$HERE" ] && [ -f "$HERE/kit.py" ] && [ -f "$HERE/kit_mcp.py" ] && [ -f "$HERE/extension/manifest.json" ]; then
   SOURCE="$HERE/kit.py"
 else
   SOURCE=""
@@ -163,10 +172,10 @@ fi
 if [ "$DRY" = 1 ]; then
   if [ -z "$SOURCE" ]; then # a dry run still needs kit.py to show what it would do, so fetch it somewhere temporary
     TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
-    get_kit "$TMP/kit.py"
+    get_kit "$TMP"
     SOURCE="$TMP/kit.py"
   fi
-  say "Would copy kit.py ($("$PYTHON" "$SOURCE" --version)) to $APP_DIR/kit.py"
+  say "Would copy kit.py ($("$PYTHON" "$SOURCE" --version)) and kit_mcp.py to $APP_DIR"
   say "Would write the launcher $LAUNCHER"
   browser_dirs | while IFS='|' read -r name dir; do say "Would write $dir/$HOST_NAME.json ($name)"; done
   KIT_APP_PATH="$APP_DIR/kit.py" "$PYTHON" "$SOURCE" register "$PYTHON" $KIT_FLAGS
@@ -175,13 +184,14 @@ fi
 
 mkdir -p "$APP_DIR"
 if [ -n "$SOURCE" ]; then
-  cp "$SOURCE" "$APP_DIR/kit.py"
+  cp "$SOURCE" "$HERE/kit_mcp.py" "$APP_DIR/"
 else
-  get_kit "$APP_DIR/kit.py"
+  get_kit "$APP_DIR"
 fi
 # The browser starts this launcher with a bare environment, so it names python3 by its full path.
-printf '#!/bin/sh\nexec "%s" "%s" "$@"\n' "$PYTHON" "$APP_DIR/kit.py" > "$LAUNCHER"
-chmod 755 "$LAUNCHER" "$APP_DIR/kit.py"
+# -I -S: ignore Python's environment and site-packages; Kit only needs the standard library.
+printf '#!/bin/sh\nexec "%s" -I -S "%s" "$@"\n' "$PYTHON" "$APP_DIR/kit.py" > "$LAUNCHER"
+chmod 755 "$LAUNCHER" "$APP_DIR/kit.py" "$APP_DIR/kit_mcp.py"
 say "✓ Kit's helper app installed"
 vsay "$("$PYTHON" "$APP_DIR/kit.py" --version) in $APP_DIR"
 

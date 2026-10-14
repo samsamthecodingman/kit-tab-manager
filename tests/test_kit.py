@@ -321,3 +321,61 @@ def test_unregister_lists_leftovers_and_deletes_only_when_asked(tmp_path, monkey
     monkeypatch.setattr(kit, "ask", lambda q, default=True: True)
     kit.register_assistants("/usr/bin/python3", remove=True, yes=True)
     assert not backup.exists() and not kit.DATA_DIR.exists()
+
+
+RELAY = KIT.with_name("kit_mcp.py")
+
+
+def relay_session(env, messages, organise=False):
+    """Like mcp_session, but through kit_mcp.py, the small relay assistants actually run."""
+    lines = "".join(json.dumps(m) + "\n" for m in messages)
+    cmd = [sys.executable, "-I", "-S", str(RELAY), *(["--organise"] if organise else [])]
+    out = subprocess.run(cmd, input=lines, capture_output=True, text=True, env=env, timeout=20)
+    return [json.loads(line) for line in out.stdout.splitlines()]
+
+
+HANDSHAKE = [
+    {"jsonrpc": "2.0", "id": 1, "method": "initialize",
+     "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "test", "version": "1"}}},
+    {"jsonrpc": "2.0", "method": "notifications/initialized"},
+    {"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
+]
+
+
+def test_relay_through_the_host():
+    with tempfile.TemporaryDirectory() as run:
+        proc, env = start_host(run)
+        try:
+            replies = relay_session(env, HANDSHAKE + [
+                {"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "list_tabs", "arguments": {}}},
+            ])
+            organise = relay_session(env, HANDSHAKE + [
+                {"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "close_tabs", "arguments": {"tab_ids": [1]}}},
+            ], organise=True)
+        finally:
+            proc.stdin.close()
+            proc.wait(timeout=5)
+    assert [r["id"] for r in replies] == [1, 2, 3]  # no reply to the notification
+    assert len(replies[1]["result"]["tools"]) == 9
+    assert json.loads(replies[2]["result"]["content"][0]["text"]) == {"tabs": [{"id": 1, "title": "Example"}]}
+    # --organise: only the grouping tools, even though the helper itself has them all
+    assert [t["name"] for t in organise[1]["result"]["tools"]] == ["list_tabs", "list_groups", "group_tabs",
+                                                                  "ungroup_tabs", "update_group", "move_tabs"]
+    assert organise[2]["error"]["code"] == -32602
+
+
+def test_relay_without_firefox_answers_itself():
+    with tempfile.TemporaryDirectory() as run:
+        replies = relay_session({**os.environ, "XDG_RUNTIME_DIR": run}, HANDSHAKE + [
+            {"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "list_groups", "arguments": {}}},
+        ], organise=True)
+    assert [r["id"] for r in replies] == [1, 2, 3]
+    assert len(replies[1]["result"]["tools"]) == 6
+    assert "Firefox isn't connected" in replies[2]["result"]["content"][0]["text"]
+
+
+def test_mcp_entry_uses_the_relay():
+    kit = load_kit()
+    entry = kit.mcp_entry("/usr/bin/python3", organise=True)
+    assert entry[:3] == ["/usr/bin/python3", "-I", "-S"]
+    assert entry[3].endswith("kit_mcp.py") and entry[4:] == ["--organise"]

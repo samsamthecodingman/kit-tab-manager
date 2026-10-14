@@ -34,7 +34,7 @@ import threading
 import time
 from pathlib import Path
 
-VERSION = "0.10.0"  # install.sh's KIT_REF must name this release (v + this VERSION), so the installer fetches this exact file
+VERSION = "0.10.1"  # install.sh's KIT_REF must name this release (v + this VERSION), so the installer fetches this exact file
 REQUEST_TIMEOUT = 60.0
 ORGANISE_TIMEOUT = 300.0
 ORGANISE_MODEL = "sonnet"
@@ -256,6 +256,19 @@ class Bridge:
         if not self.closed.is_set():
             self._send_native({"event": "organise_done", "run_id": run_id, "ok": ok, "summary": summary})
 
+    def serve_mcp(self, f, organise: bool) -> None:
+        """An assistant's MCP session, relayed line by line by kit_mcp.py. Every request gets one
+        line back: the JSON-RPC reply, or null for notifications, which need none."""
+        allowed = set(ORGANISE_TOOLS) if organise else ALLOWED_TOOLS
+        for line in f:
+            try:
+                msg = json.loads(line)
+                reply = mcp_handle(msg, allowed) if isinstance(msg, dict) else None
+            except Exception as exc:  # one odd request mustn't end the session
+                reply = {"jsonrpc": "2.0", "id": None, "error": {"code": -32603, "message": f"internal error: {exc}"}}
+            f.write((json.dumps(reply) + "\n").encode("utf-8"))
+            f.flush()
+
     def agents(self, msg: dict) -> None:
         """Lists the assistants (and connects one first, for "connect_agent")."""
         result, agents = None, None  # None: couldn't check, so the extension keeps what it knew
@@ -274,7 +287,11 @@ class Bridge:
     # The MCP server (kit.py mcp) sends one JSON request per line over the socket.
     def serve_client(self, conn: socket.socket) -> None:
         with conn, conn.makefile("rwb") as f:
-            for line in f:
+            first = f.readline()
+            if first.startswith(b'{"mcp"'):  # kit_mcp.py relaying an assistant's MCP session
+                return self.serve_mcp(f, b'"organise": true' in first)
+            line = first
+            while line:  # one request per line, answered before reading the next
                 try:
                     req = json.loads(line)
                     reply = self.call(str(req["method"]), req.get("params") or {})
@@ -282,10 +299,12 @@ class Bridge:
                     reply = {"error": f"bad request: {exc}"}
                 f.write((json.dumps(reply) + "\n").encode("utf-8"))
                 f.flush()
+                line = f.readline()
 
 
 def run_host() -> None:
-    bridge = Bridge(sys.stdin.buffer, sys.stdout.buffer)
+    global HOST_BRIDGE
+    bridge = HOST_BRIDGE = Bridge(sys.stdin.buffer, sys.stdout.buffer)
     path = socket_path()
     try:
         os.unlink(path)
@@ -325,8 +344,16 @@ NOT_CONNECTED = ("Firefox isn't connected. Open Firefox and make sure the Kit ex
                  "(and, for a temporary install, loaded from about:debugging).")
 
 
+HOST_BRIDGE = None  # set in the helper Firefox runs, which answers relayed MCP sessions itself
+
+
 def bridge_call(method: str, params: dict):
     params = {k: v for k, v in params.items() if v is not None}
+    if HOST_BRIDGE is not None:  # already in the helper: ask Firefox directly
+        reply = HOST_BRIDGE.call(method, params)
+        if "error" in reply:
+            raise RuntimeError(reply["error"])
+        return reply["result"]
     s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     s.settimeout(90)
     try:
@@ -392,8 +419,10 @@ HANDLERS["close_tabs"] = close_tabs
 ALLOWED_TOOLS = {t["name"] for t in TOOLS}  # `kit.py mcp --organise` narrows this to ORGANISE_TOOLS
 
 
-def mcp_handle(msg: dict) -> dict | None:
-    """One JSON-RPC message in, the reply out (None for notifications)."""
+def mcp_handle(msg: dict, allowed: set | None = None) -> dict | None:
+    """One JSON-RPC message in, the reply out (None for notifications). allowed: the tools this
+    session may use (ALLOWED_TOOLS unless given)."""
+    allowed = ALLOWED_TOOLS if allowed is None else allowed
     method, rid, params = msg.get("method"), msg.get("id"), msg.get("params")
     if not isinstance(params, dict):
         params = {}
@@ -408,10 +437,10 @@ def mcp_handle(msg: dict) -> dict | None:
     elif method == "ping":
         result = {}
     elif method == "tools/list":
-        result = {"tools": [t for t in TOOLS if t["name"] in ALLOWED_TOOLS]}
+        result = {"tools": [t for t in TOOLS if t["name"] in allowed]}
     elif method == "tools/call":
         name = params.get("name")
-        handler = HANDLERS.get(name) if isinstance(name, str) and name in ALLOWED_TOOLS else None
+        handler = HANDLERS.get(name) if isinstance(name, str) and name in allowed else None
         if handler is None:
             return {"jsonrpc": "2.0", "id": rid, "error": {"code": -32602, "message": f"unknown tool {params.get('name')}"}}
         try:
@@ -459,7 +488,9 @@ def run_cli(args: list[str], answers: str = "") -> subprocess.CompletedProcess:
 
 
 def mcp_entry(python: str, organise: bool = False) -> list[str]:
-    return [python, str(SELF), "mcp", *(["--organise"] if organise else [])]
+    """How assistants start Kit's MCP server: the small relay next to kit.py, with Python's lean
+    flags (-I: ignore the environment, -S: skip site-packages), so each session costs little memory."""
+    return [python, "-I", "-S", str(SELF.with_name("kit_mcp.py")), *(["--organise"] if organise else [])]
 
 
 def update_config(path: Path, entry: dict | None) -> str:

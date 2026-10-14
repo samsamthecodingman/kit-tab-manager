@@ -93,7 +93,8 @@ flowchart LR
 | Part | What it does |
 |---|---|
 | [`extension/`](extension) | The browser add-on (one add-on for Firefox and the Firefox-based browsers). Answers requests with the `tabs` and `tabGroups` APIs, and provides the toolbar menu, settings page and Kit. |
-| [`kit.py`](kit.py) | The companion app, one file using only Python's standard library. Your browser starts it when the extension loads; it listens on `$XDG_RUNTIME_DIR/tab-bridge.sock` (mode 600). `kit.py mcp` is the MCP server your AI assistant runs, with the tools `list_tabs`, `list_groups`, `group_tabs`, `ungroup_tabs`, `update_group`, `move_tabs`, `activate_tab`, `close_tabs` and `read_tab`. |
+| [`kit.py`](kit.py) | The companion app, one file using only Python's standard library. Your browser starts it when the extension loads; it listens on `$XDG_RUNTIME_DIR/tab-bridge.sock` (mode 600). `kit.py mcp` is the MCP server (assistants now run it through `kit_mcp.py`), with the tools `list_tabs`, `list_groups`, `group_tabs`, `ungroup_tabs`, `update_group`, `move_tabs`, `activate_tab`, `close_tabs` and `read_tab`. |
+| [`kit_mcp.py`](kit_mcp.py) | What your AI assistants actually run: a small relay (about 4 MB per open assistant session) that passes MCP requests to the `kit.py` Firefox started. If Firefox is closed, it answers with `kit.py` itself. |
 | [`install.sh`](install.sh) | Installs `kit.py` in your home folder, registers it with each of Firefox, LibreWolf, Floorp, Waterfox and Zen that it finds and, if it's installed, Claude Code. `--uninstall` removes it all. |
 
 ## Install

@@ -258,6 +258,7 @@ const TabBarKit = {
     clearInterval(this.timer);
     this.timer = null;
     this.shown = null;
+    this.cache.clear(); // Kit's pictures are cheap to redraw, so don't hold them while Kit is away
     clearTimeout(this.overlapTimer);
     this.active = false;
     this.flushWaiters();
